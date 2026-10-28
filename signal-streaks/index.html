@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Streaks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Michroma&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, streak stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 27px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 18px; }
+.swc { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .04em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #020203; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #e6e6e6; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Signal streaks controls">
+    <div class="ph"><b>SIGNAL STREAKS</b><span id="modeName">Tunnel</span></div>
+
+    <div class="sec" id="filterCtl">
+      <span class="sub">Filter</span>
+      <div class="chips" role="group" aria-label="Filter mode" style="grid-template-columns:repeat(3,1fr)">
+        <button type="button" class="chip" data-mode="checkpoint" title="Streaks enter noisy from the edges. Secrets stop at the filter; only clean signal passes on.">Checkpoint</button>
+        <button type="button" class="chip" data-mode="split" title="Top: the raw request. Bottom: the same moment, filtered.">Before/After</button>
+        <button type="button" class="chip" data-mode="free" title="Quadrants cut freely between noisy and filtered views.">Free</button>
+      </div>
+    </div>
+
+    <div class="sec" id="layoutCtl">
+      <span class="sub">Space</span>
+      <div class="chips" role="group" aria-label="Layout" id="layoutChips"></div>
+    </div>
+
+    <div class="sec" id="quadCtl">
+      <span class="sub">Quadrants</span>
+      <div class="row"><span class="lbl" title="Cut the frame into four windows around the center cross.">Split</span>
+        <div class="seg" role="group" aria-label="Split into quadrants">
+          <button type="button" data-split="on">On</button>
+          <button type="button" data-split="off">Off</button>
+        </div>
+      </div>
+      <div class="row" id="cleanRow"><span class="lbl" title="How many quadrants are filtered: calm, aligned streaks. The rest stay noisy.">Filtered</span>
+        <div class="seg" role="group" aria-label="Filtered quadrants">
+          <button type="button" data-clean="0">0</button>
+          <button type="button" data-clean="1">1</button>
+          <button type="button" data-clean="2">2</button>
+          <button type="button" data-clean="3">3</button>
+          <button type="button" data-clean="4">4</button>
+        </div>
+      </div>
+      <button class="btn quiet" id="cutNow" type="button">Cut now</button>
+    </div>
+
+    <div class="sec" id="motionCtl"><span class="sub">Motion</span></div>
+    <div class="sec" id="signalCtl"><span class="sub">Signal &amp; noise</span></div>
+    <div class="sec" id="lightCtl"><span class="sub">Light</span></div>
+
+    <div class="sec" id="colorCtl">
+      <span class="sub">Color</span>
+      <div class="chips" role="group" aria-label="Palette" id="palChips"></div>
+      <div class="sws">
+        <label class="swc"><input type="color" class="sw" data-col="bg">Ground</label>
+        <label class="swc"><input type="color" class="sw" data-col="light">Light</label>
+        <label class="swc"><input type="color" class="sw" data-col="secret">Secrets</label>
+      </div>
+    </div>
+
+    <div class="sec" id="typeCtl">
+      <span class="sub">Type</span>
+      <div class="row"><span class="lbl">Show type</span>
+        <div class="seg" role="group" aria-label="Show type">
+          <button type="button" data-type="on">On</button>
+          <button type="button" data-type="off">Off</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="Small labels for what goes in and what leaves.">Labels</span>
+        <div class="seg" role="group" aria-label="Show labels">
+          <button type="button" data-labels="on">On</button>
+          <button type="button" data-labels="off">Off</button>
+        </div>
+      </div>
+      <input class="txt" id="t1" maxlength="40" aria-label="First line">
+      <input class="txt" id="t2" maxlength="60" aria-label="Second line">
+      <input class="txt" id="t3" maxlength="12" aria-label="Corner label">
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="3:4">3:4</button>
+          <button type="button" data-ar="9:16">9:16</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="16:9">16:9</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record 8s</button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="play" type="button">Pause</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="btns">
+        <button class="btn quiet" id="copySet" type="button">Copy settings</button>
+        <button class="btn quiet" id="loadSet" type="button">Load settings</button>
+      </div>
+      <textarea class="txt" id="setBox" rows="4" hidden aria-label="Settings code" style="height:auto;padding:8px 10px;font-size:10px;line-height:1.4;resize:vertical"></textarea>
+      <button class="btn" id="applySet" type="button" hidden>Apply pasted settings</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="out" aria-label="Signal streaks preview: hairline light streaks rushing toward a center point, cut into four quadrants"></canvas>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = id => document.getElementById(id);
+
+  const LAYOUTS = { tunnel: "Tunnel", floor: "Floor", wave: "Wave", burst: "Burst" };
+  const PALETTES = {
+    ice:    { name: "Ice",    bg: "#010204", light: "#a9cdf5" },
+    moon:   { name: "Moon",   bg: "#030303", light: "#e9e7e2" },
+    aurora: { name: "Aurora", bg: "#010403", light: "#a9f5cf" },
+    iris:   { name: "Iris",   bg: "#030209", light: "#c8b6ff" },
+    ember:  { name: "Ember",  bg: "#050201", light: "#ffbf86" },
+    rose:   { name: "Rose",   bg: "#050203", light: "#ffbcd6" }
+  };
+  function defaults() {
+    return {
+      mode: "checkpoint", fz: 45, secrets: 35, plane: 50, labels: "on", secret: "#ffb36b",
+      layout: "tunnel", split: "on", clean: "2",
+      count: 40, speed: 40, len: 60, sideways: 45, depth: 50, cut: 30, mirror: 35, blackout: 15,
+      freq: 30, amp: 55, noise: 65, scatter: 50, scan: 40,
+      bright: 32, glow: 45, cross: 55, grain: 25,
+      palette: "ice", bg: PALETTES.ice.bg, light: PALETTES.ice.light,
+      type: "off", t1: "GRAY ©", t2: "NO TRUST NEEDED · FROM NOISE TO SIGNAL", t3: "2026",
+      ar: "3:4"
+    };
+  }
+  const KEY = "signal-streaks-v2";
+  let S = defaults();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(defaults(), s); } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  let dirty = true;
+  const changed = () => { persist(); dirty = true; };
+
+  // ---------- sliders ----------
+  const SLIDERS = [
+    ["fz", "Filter depth", "How far into the space the filter sits.", "filterCtl"],
+    ["secrets", "Secrets", "Share of streaks that carry a secret. They stop at the filter.", "filterCtl"],
+    ["plane", "Filter plane", "Visibility of the glass plane where the filtering happens.", "filterCtl"],
+    ["cut", "Cut rate", "How often the quadrants switch to a new slice.", "quadCtl"],
+    ["mirror", "Mirror", "Chance that a quadrant shows a flipped view.", "quadCtl"],
+    ["blackout", "Blackout", "Chance that a quadrant goes dark for a cut.", "quadCtl"],
+    ["count", "Count", "Number of streaks.", "motionCtl"],
+    ["speed", "Speed", "How fast the streaks travel.", "motionCtl"],
+    ["len", "Streak length", "Length of each motion trail.", "motionCtl"],
+    ["sideways", "Sideways", "Mix between rushing toward you and sliding sideways.", "motionCtl"],
+    ["depth", "Depth", "How far into the distance the streaks reach before fading.", "motionCtl"],
+    ["freq", "Frequency", "How many waves run through the space.", "signalCtl"],
+    ["amp", "Amplitude", "Height of the waves.", "signalCtl"],
+    ["noise", "Noise", "How chaotic the unfiltered quadrants are.", "signalCtl"],
+    ["scatter", "Scatter", "How far noisy streaks stray from the wave.", "signalCtl"],
+    ["scan", "Scan lines", "Thin horizontal flickers across noisy quadrants.", "signalCtl"],
+    ["bright", "Brightness", "Brightness of every streak.", "lightCtl"],
+    ["glow", "Center glow", "Soft light around the vanishing point.", "lightCtl"],
+    ["cross", "Cross", "Brightness of the center cross lines.", "lightCtl"],
+    ["grain", "Grain", "Film grain.", "lightCtl"]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="0" max="100" step="1"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent);
+    host.insertBefore(w, parent === "quadCtl" ? $("cutNow") : null);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncSlider(k); changed(); if (k === "count") scheduleSeed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k], v = S[k];
+    input.value = v; bub.textContent = v;
+    bub.style.left = `calc(${v / 100} * (100% - 24px))`;
+  }
+  for (const [id, name] of Object.entries(LAYOUTS)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.layout = id; b.textContent = name;
+    b.onclick = () => { S.layout = id; syncUI(); changed(); };
+    $("layoutChips").appendChild(b);
+  }
+  for (const [id, p] of Object.entries(PALETTES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.pal = id;
+    b.innerHTML = `<i style="background:radial-gradient(circle, ${p.light}, ${p.bg} 75%); box-shadow: 0 0 0 1px #3a3b3f"></i>${p.name}`;
+    b.onclick = () => { S.palette = id; S.bg = p.bg; S.light = p.light; syncUI(); changed(); };
+    $("palChips").appendChild(b);
+  }
+  document.querySelectorAll("[data-col]").forEach(inp => inp.addEventListener("input", () => { S[inp.dataset.col] = inp.value; S.palette = "custom"; syncUI(); changed(); }));
+  for (const key of ["mode", "labels", "split", "clean", "type", "ar"])
+    document.querySelectorAll(`[data-${key}]`).forEach(b => b.onclick = () => {
+      S[key] = b.dataset[key]; syncUI(); if (key === "ar") layout(); if (key === "clean" || key === "split" || key === "mode") cut(); changed();
+    });
+  for (const id of ["t1", "t2", "t3"]) $(id).addEventListener("input", e => { S[id] = e.target.value; changed(); });
+  $("cutNow").onclick = () => { cut(); dirty = true; };
+
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = defaults(); syncUI(); layout(); seed(); cut(); changed(); status("Reset to defaults"); };
+
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    for (const k of ["mode", "labels", "layout", "split", "clean", "type", "ar"]) press(k, S[k]);
+    $("cleanRow").hidden = S.mode !== "free";
+    press("pal", S.palette);
+    document.querySelectorAll("[data-col]").forEach(inp => inp.value = S[inp.dataset.col]);
+    for (const id of ["t1", "t2", "t3"]) if ($(id).value !== S[id]) $(id).value = S[id];
+    $("modeName").textContent = { checkpoint: "Checkpoint", split: "Before / After", free: "Free" }[S.mode] + " · " + LAYOUTS[S.layout];
+    $("play").textContent = playing ? "Pause" : "Play";
+  }
+
+  // ---------- quadrant states ----------
+  let quads = [];
+  function cut() {
+    if (S.mode === "split") {
+      const o = Math.random() * 20, mx = Math.random() < S.mirror / 100 * 0.5 ? -1 : 1;
+      quads = [{ offset: o, mx, my: 1, noisy: 1, black: false, shift: 0, half: "top", raw: true },
+               { offset: o, mx, my: -1, noisy: 0, black: false, shift: 0, half: "bottom", raw: false }];
+      return;
+    }
+    const cleanN = S.split === "on" ? +S.clean : (+S.clean >= 2 ? 1 : 0);
+    const n = S.split === "on" ? 4 : 1;
+    const order = [0, 1, 2, 3].slice(0, n).sort(() => Math.random() - 0.5);
+    const cleanSet = new Set(order.slice(0, Math.min(n, cleanN)));
+    quads = [];
+    for (let i = 0; i < n; i++) {
+      const m = S.mirror / 100;
+      quads.push({
+        offset: Math.random() * 20,
+        mx: Math.random() < m * 0.6 ? -1 : 1,
+        my: Math.random() < m * 0.4 ? -1 : 1,
+        noisy: cleanSet.has(i) ? 0 : 1,
+        black: i > 0 && Math.random() < S.blackout / 100 * 0.6,
+        shift: (Math.random() - 0.5) * 0.4
+      });
+    }
+    if (quads.every(q => q.black)) quads[0].black = false;
+  }
+
+  // ---------- WebGL ----------
+  const glc = document.createElement("canvas");
+  const gl = glc.getContext("webgl", { preserveDrawingBuffer: true, antialias: true, premultipliedAlpha: false, alpha: false });
+  const out = $("out"), octx = out.getContext("2d");
+  if (!gl) { $("stage").innerHTML = '<div class="err">This tool needs WebGL, which isn\'t available in this browser. Try a recent Chrome, Safari or Firefox with hardware acceleration on.</div>'; return; }
+  const NOISE = `
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+`;
+  // Each streak is a line from where a particle is to where it was a moment ago.
+  const VS_L = `
+precision highp float;
+attribute vec4 aSeed; attribute float aEnd;
+${NOISE}
+uniform float uTime, uFrame, uAspect, uLayout, uSpeed, uLen, uSide, uDepth, uFreq, uAmp, uNoisy, uNoise, uScatter, uScan, uBright, uShift;
+uniform vec2 uMirror;
+uniform float uMode, uFZ, uSecret, uRaw;
+uniform vec3 uLight, uSecretCol;
+varying float vA; varying vec3 vC;
+float NZ;
+float sig(float x, float z, float t){
+  float w = x * uFreq + z * 0.7 - t * 0.8;
+  float s = sin(w) + 0.35 * sin(2.3 * w + 1.3) ;
+  float nz = (n1(x * 6. + z * 2. + t * 1.5) * 2. - 1.) * 1.6 + (n1(x * 23. + uFrame * 0.7) - 0.5) * 1.2;
+  return mix(s, s * 0.3 + nz, NZ * uNoise);
+}
+vec2 proj(vec3 p){ return vec2(p.x / p.z, p.y / p.z) * 1.25; }
+void main(){
+  float r1 = aSeed.x, r2 = aSeed.y, r3 = aSeed.z, r4 = aSeed.w;
+  float t = uTime;
+  vA = 0.; vC = uLight;
+  float D0 = 2. + uDepth * 10.;
+  float isSecret = step(1. - uSecret, hash(r1 * 7.7 + r2 * 3.3));
+  // checkpoint: streaks travel away from you, toward the center, and calm down once they pass the filter
+  float zPre = uMode > 0.5 && uMode < 1.5 ? 0.25 + fract(r3 + t * uSpeed * (0.6 + 0.4 * r4) / D0) * D0 : 0.25 + fract(r3 - t * uSpeed * (0.6 + 0.4 * r4) / D0) * D0;
+  NZ = uMode > 0.5 && uMode < 1.5 ? 1. - smoothstep(uFZ - 0.5, uFZ + 0.15, zPre) : uNoisy;
+  // scan lines: flat horizontal flickers in screen space
+  if (r4 < uScan * 0.06 * (uMode > 0.5 && uMode < 1.5 ? 0.6 : uNoisy)) {
+    float row = floor(r2 * 220.) / 220. * 2. - 1.;
+    float on = step(0.6, hash(r1 * 31. + floor(uFrame * 0.5)));
+    float x0 = r1 * 2.4 - 1.2, L = 0.05 + 0.4 * hash(r3 * 7. + floor(uFrame * 0.5));
+    float sx = x0 + aEnd * L;
+    gl_Position = vec4(sx * uMirror.x, row * uMirror.y, 0., 1.);
+    vA = on * 0.35 * uBright * (1. - aEnd * 0.6);
+    return;
+  }
+  float D = 2. + uDepth * 10.;
+  float spd = uSpeed * (0.6 + 0.4 * r4);
+  float z = zPre;
+  float drift = uSide * spd * 1.8;
+  float away = uMode > 0.5 && uMode < 1.5 ? 1. : -1.;
+  vec3 p, v = normalize(vec3(uSide * 1.6, 0., away * ((1. - uSide) * 1.2 + 0.0001)));
+  if (uLayout < 0.5) {               // tunnel: floor, ceiling and walls, the floor rippling with the signal
+    float face = floor(r2 * 4.);
+    float u = fract(r1 + t * drift * 0.05) * 2. - 1.;
+    if (face < 1.) { p = vec3(u * 2.2, -0.9 + uAmp * 0.25 * sig(u * 2.2, z, t), z); }
+    else if (face < 2.) { p = vec3(u * 2.2, 0.9 + uAmp * 0.12 * sig(u * 2.2 + 3., z, t), z); }
+    else { float sd = face < 3. ? -1.4 : 1.4; p = vec3(sd + uAmp * 0.1 * sig(u * 2. + 7., z, t), u * 0.9, z); }
+  } else if (uLayout < 1.5) {        // floor: one wide plane toward the horizon
+    float u = fract(r1 + t * drift * 0.05) * 2. - 1.;
+    p = vec3(u * 3.5, -0.55 + uAmp * 0.25 * sig(u * 3.5, z, t) + (r2 - 0.5) * 0.04, z);
+  } else if (uLayout < 2.5) {        // wave: a ribbon of streaks tracing the signal through depth
+    float u = fract(r1 + t * drift * 0.05) * 2. - 1.;
+    p = vec3(u * 3., uAmp * 0.45 * sig(u * 3., z, t) + (r2 - 0.5) * 0.06, z);
+  } else {                           // burst: streaks flung out from the center
+    float a = r1 * 6.2831853, b = acos(r2 * 2. - 1.);
+    vec3 dir = vec3(sin(b) * cos(a), sin(b) * sin(a) * (0.6 + 0.4 * uAmp), cos(b));
+    float R = away > 0. ? (1. - fract(r3 + t * spd * 0.15)) * 4. : fract(r3 + t * spd * 0.15) * 4.;
+    p = dir * R + vec3(0., 0., 4.2);
+    p.z = max(p.z, 0.25);
+    v = -dir * away;
+    if (away > 0.) NZ = smoothstep(1.0, 1.8, R);
+  }
+  // noise: stray streaks and flicker
+  vec3 jit = (vec3(hash(r1 * 91.3 + floor(uFrame)), hash(r2 * 37.1 + floor(uFrame)), hash(r3 * 13.7)) - 0.5);
+  p += jit * uScatter * 0.25 * NZ * vec3(1., 1., 0.3);
+  vec3 vv = normalize(v + NZ * uScatter * (vec3(hash(r1 * 5.1), hash(r2 * 5.7), 0.) - 0.5) * 1.5);
+  vec3 q = p - vv * uLen * (0.4 + 0.6 * r4) * (aEnd);
+  if (q.z < 0.15) q.z = 0.15;
+  vec2 s = proj(q);
+  s.x += uShift;
+  float fog = exp(-p.z / (0.6 + uDepth * 4.)) * smoothstep(0.2, 0.7, p.z);
+  float flick = 1. - NZ * 0.5 * hash(r1 * 17. + floor(uFrame * 2.));
+  float cp = uMode > 0.5 && uMode < 1.5 ? 1. : 0.;
+  vA = fog * flick * uBright * (aEnd < 0.5 ? 1. : 0.05) * mix(1. + (1. - NZ) * 0.35, (0.45 + 0.55 * (1. - NZ)) * (1. + (1. - NZ) * 1.8), cp);
+  if (isSecret > 0.5) {
+    if (uMode > 0.5 && uMode < 1.5) {
+      // secrets stop at the filter, with a small flash as they hit it
+      float past = uLayout > 2.5 ? 1. - smoothstep(0.9, 1.1, length(p - vec3(0., 0., 4.2))) : smoothstep(uFZ - 0.06, uFZ + 0.06, p.z);
+      float hit = uLayout > 2.5 ? exp(-abs(length(p - vec3(0., 0., 4.2)) - 1.) * 10.) : exp(-abs(p.z - uFZ) * 9.);
+      vA *= (1. - past) * (1. + hit * 3.) * 3.2;
+      vC = uSecretCol;
+    } else if (uRaw > 0.5) { vC = uSecretCol; vA *= 1.6; }
+    else vA = 0.;
+  }
+  gl_Position = vec4(s.x / uAspect * uMirror.x, s.y * uMirror.y, 0., 1.);
+}`;
+  const FS_L = `
+precision mediump float;
+varying float vA; varying vec3 vC;
+void main(){ gl_FragColor = vec4(vC * vA, 1.); }`;
+  const VS_Q = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS_BG = `
+precision highp float;
+uniform vec2 uRes; uniform vec3 uBg, uLight; uniform float uGlow;
+void main(){
+  vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y);
+  float r = length(p * vec2(1., 1.3));
+  gl_FragColor = vec4(uBg + uLight * uGlow * (0.22 * exp(-r * 4.5) + 0.05 * exp(-r * 1.4)), 1.);
+}`;
+  const FS_FIN = `
+precision highp float;
+${NOISE}
+uniform vec2 uRes; uniform float uScale, uFrame, uGrain, uCross, uSplit; uniform vec3 uLight;
+void main(){
+  vec2 f = gl_FragCoord.xy, c = 0.5 * uRes;
+  float px = uScale;
+  float cross = uSplit * (exp(-abs(f.x - c.x) / (0.6 * px)) + exp(-abs(f.y - c.y) / (0.6 * px)));
+  cross *= 0.55 + 0.45 * (1. - min(1., length(f - c) / (0.6 * min(uRes.x, uRes.y))));
+  vec2 q = f / uRes - 0.5;
+  float v = 1. - smoothstep(1.0, 0.35, length(q * vec2(1.0, 1.1)));
+  float g = hash2(f / uScale + fract(uFrame * 0.618) * 97.);
+  vec3 add = uLight * cross * uCross * 0.5 + (g - 0.5) * uGrain * 0.06;
+  gl_FragColor = vec4(add, v);
+}`;
+  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const link = (vs, fs) => { const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; };
+  const PL = link(VS_L, FS_L), PB = link(VS_Q, FS_BG), PF = link(VS_Q, FS_FIN);
+  const PG = link("attribute vec2 a; uniform vec2 uMirror; void main(){ gl_Position = vec4(a * uMirror, 0., 1.); }",
+                  "precision mediump float; uniform vec3 uC; void main(){ gl_FragColor = vec4(uC, 1.); }");
+  const UG = { uMirror: gl.getUniformLocation(PG, "uMirror"), uC: gl.getUniformLocation(PG, "uC") };
+  const gbuf = gl.createBuffer();
+  // The glass filter plane, projected the same way as the streaks.
+  function planeLines(aspect, zF) {
+    const P = (x, y, z) => [x / z * 1.25 / aspect, y / z * 1.25];
+    const L = [];
+    const rect = (x0, x1, y0, y1, z) => { const c = [P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)]; for (let i = 0; i < 4; i++) L.push(...c[i], ...c[(i + 1) % 4]); };
+    if (S.layout === "tunnel") rect(-1.4, 1.4, -0.9, 0.9, zF);
+    else if (S.layout === "floor") rect(-3.5, 3.5, -0.55, 0.7, zF);
+    else if (S.layout === "wave") rect(-3, 3, -0.8, 0.8, zF);
+    else for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, b = (i + 1) / 64 * Math.PI * 2; L.push(...P(Math.cos(a), Math.sin(a), 4.2), ...P(Math.cos(b), Math.sin(b), 4.2)); }
+    return new Float32Array(L);
+  }
+  const uni = (p, names) => Object.fromEntries(names.map(n => [n, gl.getUniformLocation(p, n)]));
+  const UL = uni(PL, ["uTime", "uFrame", "uAspect", "uLayout", "uSpeed", "uLen", "uSide", "uDepth", "uFreq", "uAmp", "uNoisy", "uNoise", "uScatter", "uScan", "uBright", "uShift", "uMirror", "uLight", "uMode", "uFZ", "uSecret", "uRaw", "uSecretCol"]);
+  const UB = uni(PB, ["uRes", "uBg", "uLight", "uGlow"]);
+  const UF = uni(PF, ["uRes", "uScale", "uFrame", "uGrain", "uCross", "uSplit", "uLight"]);
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const lbuf = gl.createBuffer();
+  let N = 0;
+  function seed() {
+    N = Math.round(15000 + S.count / 100 * 185000);
+    const d = new Float32Array(N * 2 * 5);
+    for (let i = 0; i < N; i++) {
+      const a = Math.random(), b = Math.random(), c = Math.random(), e = Math.random();
+      for (let k = 0; k < 2; k++) { const o = (i * 2 + k) * 5; d[o] = a; d[o + 1] = b; d[o + 2] = c; d[o + 3] = e; d[o + 4] = k; }
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, lbuf);
+    gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+    dirty = true;
+  }
+  let seedTimer;
+  const scheduleSeed = () => { clearTimeout(seedTimer); seedTimer = setTimeout(seed, 120); };
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+  const bindQuad = p => { gl.bindBuffer(gl.ARRAY_BUFFER, quad); const a = gl.getAttribLocation(p, "a"); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0); };
+  const LAYOUT_ID = { tunnel: 0, floor: 1, wave: 2, burst: 3 };
+
+  function renderGL(W, H, t, frameNo, scale) {
+    if (glc.width !== W || glc.height !== H) { glc.width = W; glc.height = H; }
+    gl.viewport(0, 0, W, H);
+    const light = rgb(S.light);
+    gl.disable(gl.SCISSOR_TEST); gl.disable(gl.BLEND);
+    gl.useProgram(PB); bindQuad(PB);
+    gl.uniform2f(UB.uRes, W, H); gl.uniform3fv(UB.uBg, rgb(S.bg)); gl.uniform3fv(UB.uLight, light); gl.uniform1f(UB.uGlow, S.glow / 100 * 1.6);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(PL);
+    gl.bindBuffer(gl.ARRAY_BUFFER, lbuf);
+    const aS = gl.getAttribLocation(PL, "aSeed"), aE = gl.getAttribLocation(PL, "aEnd");
+    gl.enableVertexAttribArray(aS); gl.vertexAttribPointer(aS, 4, gl.FLOAT, false, 20, 0);
+    gl.enableVertexAttribArray(aE); gl.vertexAttribPointer(aE, 1, gl.FLOAT, false, 20, 16);
+    gl.uniform1f(UL.uFrame, frameNo); gl.uniform1f(UL.uAspect, W / H);
+    gl.uniform1f(UL.uLayout, LAYOUT_ID[S.layout]);
+    gl.uniform1f(UL.uSpeed, 0.2 + S.speed / 100 * 3);
+    gl.uniform1f(UL.uLen, 0.05 + S.len / 100 * 1.6);
+    gl.uniform1f(UL.uSide, S.sideways / 100);
+    gl.uniform1f(UL.uDepth, S.depth / 100);
+    gl.uniform1f(UL.uFreq, 0.5 + S.freq / 100 * 6);
+    gl.uniform1f(UL.uAmp, S.amp / 100 * 1.6);
+    gl.uniform1f(UL.uNoise, S.noise / 100);
+    gl.uniform1f(UL.uScatter, S.scatter / 100);
+    gl.uniform1f(UL.uScan, S.scan / 100);
+    gl.uniform1f(UL.uBright, (0.03 + S.bright / 100 * 0.35) * Math.sqrt(110000 / N));
+    gl.uniform3fv(UL.uLight, light);
+    gl.uniform3fv(UL.uSecretCol, rgb(S.secret));
+    const modeId = { free: 0, checkpoint: 1, split: 2 }[S.mode];
+    const D0 = 2 + S.depth / 100 * 10, zF = 0.6 + S.fz / 100 * D0 * 0.6;
+    gl.uniform1f(UL.uMode, modeId);
+    gl.uniform1f(UL.uFZ, zF);
+    gl.uniform1f(UL.uSecret, S.secrets / 100 * 0.3);
+    gl.enable(gl.SCISSOR_TEST);
+    const n = quads.length;
+    for (let i = 0; i < n; i++) {
+      const q = quads[i];
+      const rect = q.half === "top" ? [0, H >> 1, W, H - (H >> 1)] : q.half === "bottom" ? [0, 0, W, H >> 1]
+        : n === 1 ? [0, 0, W, H] : [[0, H >> 1, W >> 1, H - (H >> 1)], [W >> 1, H >> 1, W - (W >> 1), H - (H >> 1)], [0, 0, W >> 1, H >> 1], [W >> 1, 0, W - (W >> 1), H >> 1]][i];
+      if (q.black) continue;
+      gl.scissor(...rect);
+      gl.uniform1f(UL.uTime, t + q.offset);
+      gl.uniform2f(UL.uMirror, q.mx, q.my);
+      gl.uniform1f(UL.uNoisy, q.noisy);
+      gl.uniform1f(UL.uShift, n === 1 ? 0 : q.shift * 0.2);
+      gl.uniform1f(UL.uRaw, q.raw === false ? 0 : 1);
+      gl.drawArrays(gl.LINES, 0, N * 2);
+      if (modeId === 1 && S.plane > 0) {
+        const pl = planeLines(W / H, zF);
+        gl.useProgram(PG);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gbuf); gl.bufferData(gl.ARRAY_BUFFER, pl, gl.DYNAMIC_DRAW);
+        const ga = gl.getAttribLocation(PG, "a"); gl.enableVertexAttribArray(ga); gl.vertexAttribPointer(ga, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform2f(UG.uMirror, q.mx, q.my);
+        const k = S.plane / 100 * 0.5; gl.uniform3f(UG.uC, light[0] * k, light[1] * k, light[2] * k);
+        gl.drawArrays(gl.LINES, 0, pl.length / 2);
+        gl.disableVertexAttribArray(ga);
+        gl.useProgram(PL);
+        gl.bindBuffer(gl.ARRAY_BUFFER, lbuf);
+        gl.enableVertexAttribArray(aS); gl.vertexAttribPointer(aS, 4, gl.FLOAT, false, 20, 0);
+        gl.enableVertexAttribArray(aE); gl.vertexAttribPointer(aE, 1, gl.FLOAT, false, 20, 16);
+      }
+    }
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disableVertexAttribArray(aS); gl.disableVertexAttribArray(aE);
+
+    // cross lines and grain add light; vignette darkens via alpha
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(PF); bindQuad(PF);
+    gl.uniform2f(UF.uRes, W, H); gl.uniform1f(UF.uScale, scale); gl.uniform1f(UF.uFrame, frameNo);
+    gl.uniform1f(UF.uGrain, S.grain / 100); gl.uniform1f(UF.uCross, S.cross / 100); gl.uniform1f(UF.uSplit, S.split === "on" || S.mode === "split" ? 1 : 0);
+    gl.uniform3fv(UF.uLight, light);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disable(gl.BLEND);
+  }
+
+  // ---------- type ----------
+  function drawLabels(c, W, H) {
+    if (S.labels !== "on" || S.mode === "free") return;
+    c.save();
+    const fs = Math.max(8, Math.round(Math.min(W, H) * 0.015)), pad = Math.round(Math.min(W, H) * 0.04);
+    c.font = `400 ${fs}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    if ("letterSpacing" in c) c.letterSpacing = fs * 0.08 + "px";
+    c.fillStyle = S.light; c.globalAlpha = 0.75;
+    c.fillText("IN THE REQUEST YOU SEND", pad, pad + fs);
+    const leave = "WHAT LEAVES", leaveY = S.mode === "split" ? H / 2 + pad + fs : H - pad;
+    if (S.mode === "split") c.fillText(leave, pad, leaveY);
+    else { c.textAlign = "right"; c.fillText(leave, W - pad, leaveY); c.textAlign = "left"; }
+    c.fillStyle = S.secret;
+    c.fillText(S.mode === "split" ? "▬ SECRETS, IN PLAIN TEXT" : "▬ SECRETS STOP AT THE FILTER", pad, pad + fs * 2.8);
+    c.restore();
+  }
+  function drawType(c, W, H) {
+    drawLabels(c, W, H);
+    if (S.type !== "on") return;
+    c.save();
+    c.fillStyle = S.light;
+    const fs = Math.max(9, Math.round(Math.min(W, H) * 0.024));
+    c.font = `400 ${fs}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    if ("letterSpacing" in c) c.letterSpacing = fs * 0.04 + "px";
+    const w2 = c.measureText((S.t2 || "").toUpperCase()).width;
+    const x0 = W / 2 - w2 / 2, y0 = H * 0.5 - fs * 1.2;
+    c.fillText((S.t1 || "").toUpperCase(), x0, y0 - fs * 0.3);
+    c.fillText((S.t2 || "").toUpperCase(), x0, y0 + fs * 1.1);
+    c.font = `400 ${Math.round(fs * 0.7)}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    c.textAlign = "right"; c.globalAlpha = 0.7;
+    c.fillText((S.t3 || "").toUpperCase(), x0 + w2, y0 - fs * 0.3);
+    c.restore();
+  }
+
+  // ---------- layout ----------
+  let dpr = 1, cssW = 0, cssH = 0;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const stage = $("stage"), bw = stage.clientWidth, bh = stage.clientHeight;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    dpr = Math.min(window.devicePixelRatio || 1, 2, 1700 / Math.max(w, h));
+    cssW = Math.round(w); cssH = Math.round(h);
+    out.style.width = cssW + "px"; out.style.height = cssH + "px";
+    out.width = Math.round(w * dpr); out.height = Math.round(h * dpr);
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe($("stage"));
+  out.addEventListener("click", () => { cut(); dirty = true; });
+  out.style.cursor = "pointer";
+  out.title = "Click to cut";
+
+  // ---------- loop ----------
+  let simT = 3, frameNo = 1, frameAcc = 0, last = performance.now(), nextCut = 0;
+  function frame(W, H, scale, c) { renderGL(W, H, simT, frameNo, scale); c.drawImage(glc, 0, 0, W, H); drawType(c, W, H); }
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (playing) {
+      simT += dt; frameAcc += dt * 24;
+      if (frameAcc >= 1) { frameNo += Math.floor(frameAcc); frameAcc %= 1; }
+      if (S.cut > 0 && simT > nextCut) { cut(); nextCut = simT + (0.3 + (100 - S.cut) / 100 * 3.5) * (0.6 + Math.random() * 0.8); }
+    }
+    if ((playing || dirty) && out.width && N) { frame(out.width, out.height, dpr, octx); dirty = false; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export & settings ----------
+  const dlReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+  $("exPng").onclick = () => {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const long = Math.min(3200, gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+    const W = aw >= ah ? long : Math.round(long * aw / ah), H = aw >= ah ? Math.round(long * ah / aw) : long;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    frame(W, H, W / cssW, c.getContext("2d"));
+    c.toBlob(b => { dirty = true; b ? saveFile(`signal-streaks-${S.layout}.png`, b) : status("PNG export failed"); }, "image/png");
+  };
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!out.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    if (!playing) { playing = true; syncUI(); }
+    const rec = new MediaRecorder(out.captureStream(60), { mimeType: mime, videoBitsPerSecond: 20e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false; $("exVid").disabled = false; $("exVid").textContent = "Record 8s";
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(`signal-streaks-8s.${ext}`, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    recording = true; $("exVid").disabled = true; $("exVid").textContent = "Recording…";
+    rec.start(250);
+    setTimeout(() => rec.stop(), 8000);
+  };
+  $("copySet").onclick = () => {
+    const code = JSON.stringify(S), box = $("setBox");
+    box.hidden = false; box.value = code; $("applySet").hidden = true;
+    const fallback = () => { box.focus(); box.select(); status("Select all and copy the settings above."); };
+    try { navigator.clipboard.writeText(code).then(() => status("Settings copied. Paste them anywhere to share this look."), fallback); } catch (e) { fallback(); }
+  };
+  $("loadSet").onclick = () => { const box = $("setBox"); box.hidden = false; box.value = ""; box.placeholder = "Paste settings here"; box.focus(); $("applySet").hidden = false; };
+  $("applySet").onclick = () => {
+    try {
+      const v = JSON.parse($("setBox").value);
+      if (!v || typeof v !== "object") throw 0;
+      S = Object.assign(defaults(), v);
+      syncUI(); layout(); seed(); cut(); changed();
+      $("setBox").hidden = true; $("applySet").hidden = true;
+      status("Settings loaded");
+    } catch (e) { status("Those settings couldn't be read. Paste the full text from Copy settings."); }
+  };
+
+  // ---------- boot ----------
+  syncUI();
+  layout();
+  seed();
+  cut();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty = true; });
+  requestAnimationFrame(tick);
+})();
+</script>
