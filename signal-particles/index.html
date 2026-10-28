@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Particles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Michroma&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, particle stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 27px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 18px; }
+.swc { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .04em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #050505; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #e6e6e6; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Signal particles controls">
+    <div class="ph"><b>SIGNAL PARTICLES</b><span id="modeName">Sweeping</span></div>
+
+    <div class="sec" id="filterCtl">
+      <span class="sub">Filter</span>
+      <div class="row"><span class="lbl">Region</span>
+        <div class="seg" role="group" aria-label="Filter region">
+          <button type="button" data-region="full">Full</button>
+          <button type="button" data-region="pane">Pane</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter glides back and forth across the light.">Sweep</span>
+        <div class="seg" role="group" aria-label="Sweep">
+          <button type="button" data-sweep="off">Off</button>
+          <button type="button" data-sweep="on">On</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter rises and falls, so the particles move from noise to a clear wave and back.">Breathe</span>
+        <div class="seg" role="group" aria-label="Breathe">
+          <button type="button" data-breathe="off">Off</button>
+          <button type="button" data-breathe="on">On</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl">Show pane</span>
+        <div class="seg" role="group" aria-label="Show the filter pane">
+          <button type="button" data-pane="on">On</button>
+          <button type="button" data-pane="off">Off</button>
+        </div>
+      </div>
+      <p class="hint">Drag on the image to move the filter.</p>
+    </div>
+
+    <div class="sec" id="signalCtl"><span class="sub">Signal</span></div>
+    <div class="sec" id="partCtl"><span class="sub">Particles</span></div>
+    <div class="sec" id="floorCtl"><span class="sub">Floor &amp; texture</span></div>
+
+    <div class="sec" id="colorCtl">
+      <span class="sub">Color</span>
+      <div class="chips" role="group" aria-label="Palette" id="palChips"></div>
+      <div class="sws">
+        <label class="swc"><input type="color" class="sw" data-col="bg">Ground</label>
+        <label class="swc"><input type="color" class="sw" data-col="light">Light</label>
+      </div>
+    </div>
+
+    <div class="sec" id="typeCtl">
+      <span class="sub">Type</span>
+      <div class="row"><span class="lbl">Show type</span>
+        <div class="seg" role="group" aria-label="Show type">
+          <button type="button" data-type="on">On</button>
+          <button type="button" data-type="off">Off</button>
+        </div>
+      </div>
+      <input class="txt" id="t1" maxlength="40" aria-label="First line">
+      <input class="txt" id="t2" maxlength="60" aria-label="Second line">
+      <input class="txt" id="t3" maxlength="12" aria-label="Corner label">
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="16:9">16:9</button>
+          <button type="button" data-ar="21:9">21:9</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="9:16">9:16</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record 8s</button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="play" type="button">Pause</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="btns">
+        <button class="btn quiet" id="copySet" type="button">Copy settings</button>
+        <button class="btn quiet" id="loadSet" type="button">Load settings</button>
+      </div>
+      <textarea class="txt" id="setBox" rows="4" hidden aria-label="Settings code" style="height:auto;padding:8px 10px;font-size:10px;line-height:1.4;resize:vertical"></textarea>
+      <button class="btn" id="applySet" type="button" hidden>Apply pasted settings</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="out" aria-label="Signal particles preview: a wave of glowing particles, with particles falling from it to a reflective floor"></canvas>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = id => document.getElementById(id);
+
+  const PALETTES = {
+    moon:   { name: "Moon",   bg: "#030303", light: "#e9e7e2" },
+    aurora: { name: "Aurora", bg: "#020504", light: "#b9ffd9" },
+    ice:    { name: "Ice",    bg: "#020306", light: "#c6dcff" },
+    iris:   { name: "Iris",   bg: "#040309", light: "#d9c8ff" },
+    ember:  { name: "Ember",  bg: "#060302", light: "#ffc08a" },
+    rose:   { name: "Rose",   bg: "#060304", light: "#ffc6dc" }
+  };
+  function defaults() {
+    return {
+    "region": "pane",
+    "sweep": "off",
+    "breathe": "off",
+    "pane": "on",
+    "px": 0.5667095162224797,
+    "filter": 100,
+    "pwidth": 61,
+    "edge": 45,
+    "freq": 22,
+    "harm": 10,
+    "amp": 50,
+    "height": 77,
+    "noise": 100,
+    "grit": 45,
+    "spikes": 100,
+    "count": 0,
+    "size": 18,
+    "len": 85,
+    "fall": 35,
+    "density": 40,
+    "shafts": 60,
+    "crest": 35,
+    "haze": 35,
+    "scatter": 50,
+    "fringe": 45,
+    "exposure": 55,
+    "reflect": 55,
+    "horizon": 30,
+    "floorgrid": 30,
+    "grain": 25,
+    "speed": 35,
+    "palette": "moon",
+    "bg": "#030303",
+    "light": "#e9e7e2",
+    "type": "on",
+    "t1": "GRAY ©",
+    "t2": "NO TRUST NEEDED · FROM NOISE TO SIGNAL",
+    "t3": "2026",
+    "ar": "16:9"
+  };
+  }
+  const KEY = "signal-particles-v1";
+  let S = defaults();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(defaults(), s); } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  let dirty = true;
+  const changed = () => { persist(); dirty = true; };
+
+  // ---------- sliders ----------
+  const RESEED = new Set(["count", "density", "shafts", "crest", "haze"]);
+  const SLIDERS = [
+    ["filter", "Filter", "How much noise is removed inside the filter. 100 leaves a clear wave.", "filterCtl"],
+    ["pwidth", "Pane width", "Width of the filtered region.", "filterCtl"],
+    ["edge", "Edge", "How gradually the particles calm at the filter's edges.", "filterCtl"],
+    ["freq", "Frequency", "How many waves run across the frame.", "signalCtl"],
+    ["harm", "Harmonics", "Overtones layered into the clean wave.", "signalCtl"],
+    ["amp", "Amplitude", "Height of the wave.", "signalCtl"],
+    ["height", "Crest height", "Where the wave sits in the frame.", "signalCtl"],
+    ["noise", "Noise", "How jagged the unfiltered signal is.", "signalCtl"],
+    ["grit", "Grit", "Fine, fast-changing jitter in the noise.", "signalCtl"],
+    ["spikes", "Spikes", "Sudden sharp peaks in the noise.", "signalCtl"],
+    ["count", "Count", "Number of particles.", "partCtl"],
+    ["size", "Size", "Size of each particle.", "partCtl"],
+    ["len", "Curtain", "How far particles fall below the wave.", "partCtl"],
+    ["fall", "Fall speed", "How fast particles fall.", "partCtl"],
+    ["density", "Streaks", "How tightly falling particles gather into streaks.", "partCtl"],
+    ["shafts", "Shafts", "A few denser beams that reach the floor.", "partCtl"],
+    ["crest", "Crest", "Share of particles that trace the wave itself.", "partCtl"],
+    ["haze", "Rising", "Faint particles drifting up from the wave.", "partCtl"],
+    ["scatter", "Scatter", "How far noisy particles stray from their path.", "partCtl"],
+    ["fringe", "Fringe", "Warm and cool color along the crest.", "partCtl"],
+    ["exposure", "Exposure", "Brightness of every particle.", "partCtl"],
+    ["reflect", "Reflection", "How strongly the floor mirrors the particles.", "floorCtl"],
+    ["horizon", "Floor height", "Where the floor meets the wall.", "floorCtl"],
+    ["floorgrid", "Floor tiles", "Faint tile seams on the floor.", "floorCtl"],
+    ["grain", "Grain", "Film grain.", "floorCtl"],
+    ["speed", "Speed", "How fast everything moves.", "floorCtl"]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="0" max="100" step="1"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent);
+    host.insertBefore(w, parent === "filterCtl" ? host.querySelector(".row") : null);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncSlider(k); changed(); if (RESEED.has(k)) scheduleSeed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k], v = S[k];
+    input.value = v; bub.textContent = v;
+    bub.style.left = `calc(${v / 100} * (100% - 24px))`;
+  }
+  for (const [id, p] of Object.entries(PALETTES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.pal = id;
+    b.innerHTML = `<i style="background:linear-gradient(180deg, ${p.light}, ${p.bg}); box-shadow: 0 0 0 1px #3a3b3f"></i>${p.name}`;
+    b.onclick = () => { S.palette = id; S.bg = p.bg; S.light = p.light; syncUI(); changed(); };
+    $("palChips").appendChild(b);
+  }
+  document.querySelectorAll("[data-col]").forEach(inp => inp.addEventListener("input", () => { S[inp.dataset.col] = inp.value; S.palette = "custom"; syncUI(); changed(); }));
+  for (const key of ["region", "sweep", "breathe", "pane", "type", "ar"])
+    document.querySelectorAll(`[data-${key}]`).forEach(b => b.onclick = () => {
+      S[key] = b.dataset[key];
+      if (key === "sweep" && S.sweep === "on") S.region = "pane";
+      syncUI(); if (key === "ar") layout(); changed();
+    });
+  for (const id of ["t1", "t2", "t3"]) $(id).addEventListener("input", e => { S[id] = e.target.value; changed(); });
+
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = defaults(); syncUI(); layout(); seed(); changed(); status("Reset to defaults"); };
+  // Settings as text, so a look can be shared or baked in as the default.
+  $("copySet").onclick = () => {
+    const code = JSON.stringify(S);
+    const box = $("setBox");
+    box.hidden = false; box.value = code; $("applySet").hidden = true;
+    const done = () => status("Settings copied. Paste them anywhere to share this look.");
+    const fallback = () => { box.focus(); box.select(); status("Select all and copy the settings above."); };
+    try { navigator.clipboard.writeText(code).then(done, fallback); } catch (e) { fallback(); }
+  };
+  $("loadSet").onclick = () => {
+    const box = $("setBox");
+    box.hidden = false; box.value = ""; box.placeholder = "Paste settings here"; box.focus();
+    $("applySet").hidden = false;
+  };
+  $("applySet").onclick = () => {
+    try {
+      const v = JSON.parse($("setBox").value);
+      if (!v || typeof v !== "object") throw 0;
+      S = Object.assign(defaults(), v);
+      syncUI(); layout(); seed(); changed();
+      $("setBox").hidden = true; $("applySet").hidden = true;
+      status("Settings loaded");
+    } catch (e) { status("Those settings couldn't be read. Paste the full text from Copy settings."); }
+  };
+
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    for (const k of ["region", "sweep", "breathe", "pane", "type", "ar"]) press(k, S[k]);
+    press("pal", S.palette);
+    document.querySelectorAll("[data-col]").forEach(inp => inp.value = S[inp.dataset.col]);
+    for (const id of ["t1", "t2", "t3"]) if ($(id).value !== S[id]) $(id).value = S[id];
+    $("modeName").textContent = S.region === "full" ? "Full filter" : S.sweep === "on" ? "Sweeping" : "Filtering";
+    $("play").textContent = playing ? "Pause" : "Play";
+  }
+
+  // ---------- WebGL ----------
+  const glc = document.createElement("canvas");
+  const gl = glc.getContext("webgl", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false, alpha: false });
+  const out = $("out"), octx = out.getContext("2d");
+  if (!gl) { $("stage").innerHTML = '<div class="err">This tool needs WebGL, which isn\'t available in this browser. Try a recent Chrome, Safari or Firefox with hardware acceleration on.</div>'; return; }
+
+  const NOISE_GLSL = `
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+float fbm1(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 4; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; }
+`;
+  const SIGNAL_GLSL = `
+uniform vec2 uRes; uniform float uTime, uFrame, uScale;
+uniform float uFilter, uRegion, uPc, uPw, uEdge;
+uniform float uFreq, uHarm, uAmp, uCrestY, uNoise, uGrit, uSpikes;
+float filt(float x){
+  if (uRegion < 0.5) return uFilter;
+  float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5;
+  return uFilter * smoothstep(l - uEdge, l + uEdge, x) * (1. - smoothstep(r - uEdge, r + uEdge, x));
+}
+float crest(float x){
+  float c = filt(x);
+  float w = 6.2831853 * uFreq * x + uTime * 0.5;
+  float clean = (sin(w) + uHarm * (0.5 * sin(2. * w + uTime * 0.3) + 0.3 * sin(3. * w - uTime * 0.2))) / (1. + uHarm * 0.8);
+  float nz = (fbm1(x * 22. + uTime * 0.35) * 2. - 1.) * 1.3;
+  nz += (hash(floor(x * 260.) + uFrame * 13.1) - 0.5) * uGrit * 0.7;
+  nz += pow(max(0., n1(x * 38. + uTime * 2.) - 0.72) / 0.28, 2.) * uSpikes * 1.6 * (n1(x * 38. + 5.) > 0.5 ? 1. : -1.);
+  float y = (0.35 + 0.65 * c) * clean * uAmp + (1. - c) * nz * uNoise * 0.6;
+  return uCrestY + 0.15 * y;
+}
+`;
+  // Particles: positions are computed from each particle's seed and the clock, so nothing is simulated on the CPU.
+  const VS_P = `
+precision highp float;
+attribute vec4 aSeed;   // x, phase, rand, kind (0 curtain, 1 crest, 2 rising) + weight in fraction
+${NOISE_GLSL}
+${SIGNAL_GLSL}
+uniform float uPass, uLen, uFall, uScatter, uSize, uExposure, uReflect, uHorizon, uFringe;
+varying float vA; varying vec3 vTint;
+void main(){
+  float kind = floor(aSeed.w), wgt = fract(aSeed.w) * 2.;
+  float r = aSeed.z, x = aSeed.x;
+  float c = filt(x);
+  float noisy = 1. - c;
+  // noisy particles stray sideways and flicker
+  x += noisy * uScatter * 0.012 * (hash(r * 91.7 + floor(uFrame * 0.5)) - 0.5) * (kind < 0.5 ? 1. : 0.4);
+  float cy = crest(x);
+  float y, a, size = uSize;
+  vTint = vec3(1.);
+  if (kind < 0.5) {
+    float life = fract(uTime * uFall * (0.35 + 0.65 * r) + aSeed.y);
+    float L = uLen * (0.45 + 0.55 * fbm1(x * 30. + 11.)) * (0.5 + 1.2 * wgt);
+    x += noisy * uScatter * 0.006 * sin(life * 25. + r * 40.);
+    y = cy - life * L;
+    a = (0.2 + 0.9 * wgt) * pow(1. - life, 0.7) * (1. + noisy * 0.6 * (hash(r * 13.1 + uFrame) - 0.5));
+    size *= 0.8 + 0.4 * r;
+  } else if (kind < 1.5) {
+    float g = (hash(r * 7.3) + hash(r * 3.1) + hash(r * 5.9) - 1.5) * 1.15;
+    y = cy + g * (0.0025 + noisy * uScatter * 0.02);
+    a = 0.55 * (0.5 + 0.7 * wgt);
+    size *= 1.1;
+    vTint = mix(vec3(1.), g > 0. ? vec3(1.0, 0.75, 0.5) : vec3(0.55, 0.72, 1.0), uFringe * min(1., abs(g) * 1.6));
+  } else {
+    float life = fract(uTime * 0.06 * (0.4 + r) + aSeed.y);
+    y = cy + life * (0.25 + 0.3 * r);
+    x += sin(life * 6.2831 + r * 20.) * 0.01;
+    a = 0.22 * (1. - life) * (1. - life);
+    size *= 0.7;
+  }
+  if (y < uHorizon) { a *= exp(-(uHorizon - y) * 60.); y = uHorizon; }
+  if (uPass > 0.5) {
+    float h = y - uHorizon;
+    y = uHorizon - h * 0.65;
+    a *= uReflect * exp(-h * 3.0);
+    x += (hash(r * 3.3 + floor(uFrame)) - 0.5) * 0.002 * (1. + h * 6.);
+  }
+  vA = a * uExposure;
+  gl_Position = vec4(x * 2. - 1., y * 2. - 1., 0., 1.);
+  gl_PointSize = size * uScale;
+}`;
+  const FS_P = `
+precision mediump float;
+uniform vec3 uLight;
+varying float vA; varying vec3 vTint;
+void main(){
+  vec2 q = gl_PointCoord - 0.5;
+  float d = length(q);
+  float f = smoothstep(0.5, 0.0, d);
+  gl_FragColor = vec4(uLight * vTint * vA * f * f, 1.);
+}`;
+  // Background: ground, floor tiles, pane edges.
+  const VS_Q = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS_BG = `
+precision highp float;
+${NOISE_GLSL}
+uniform vec2 uRes; uniform float uScale, uHorizon, uFloorGrid, uShowPane, uRegion, uPc, uPw;
+uniform vec3 uBg, uLight;
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec3 col = uBg;
+  if (uv.y < uHorizon) {
+    float depth = (uHorizon - uv.y) / uHorizon;
+    col += uLight * 0.012 * (1. - depth);
+    float z = 1. / (depth + 0.06);
+    float u = (uv.x - 0.5) * (uRes.x / uRes.y) * z * 0.5;
+    float lx = abs(fract(u) - 0.5), lz = abs(fract(z * 0.18) - 0.5);
+    float seam = max(1. - smoothstep(0., 0.012 * z, lx), 1. - smoothstep(0., 0.02, lz));
+    col += uLight * 0.03 * uFloorGrid * seam * (0.4 + 0.6 * (1. - depth));
+  }
+  if (uShowPane > 0.5 && uRegion > 0.5) {
+    float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5, px = uScale / uRes.x;
+    float e = exp(-abs(uv.x - l) / (1.2 * px)) + exp(-abs(uv.x - r) / (1.2 * px));
+    float body = smoothstep(l - px, l + px, uv.x) * (1. - smoothstep(r - px, r + px, uv.x));
+    float fadeY = uv.y >= uHorizon ? 1. : 0.35 * exp(-(uHorizon - uv.y) / uHorizon * 2.);
+    col += uLight * (e * 0.07 + body * 0.01) * fadeY;
+  }
+  gl_FragColor = vec4(col, 1.);
+}`;
+  // Finish: vignette and grain over everything.
+  const FS_FIN = `
+precision highp float;
+${NOISE_GLSL}
+uniform vec2 uRes; uniform float uScale, uFrame, uGrain;
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes, q = uv - 0.5;
+  float v = 1. - smoothstep(1.05, 0.25, length(q * vec2(1.0, 1.25)));
+  float g = hash2(gl_FragCoord.xy / uScale + fract(uFrame * 0.618) * 97.);
+  float gA = uGrain * 0.06;
+  float A = clamp(v + gA, 0., 1.);
+  gl_FragColor = vec4(vec3(g) * gA / max(A, 1e-4), A);
+}`;
+  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const link = (vs, fs) => { const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; };
+  const PP = link(VS_P, FS_P), PB = link(VS_Q, FS_BG), PF = link(VS_Q, FS_FIN);
+  const uni = (p, names) => Object.fromEntries(names.map(n => [n, gl.getUniformLocation(p, n)]));
+  const UP = uni(PP, ["uRes", "uTime", "uFrame", "uScale", "uFilter", "uRegion", "uPc", "uPw", "uEdge", "uFreq", "uHarm", "uAmp", "uCrestY", "uNoise", "uGrit", "uSpikes", "uPass", "uLen", "uFall", "uScatter", "uSize", "uExposure", "uReflect", "uHorizon", "uFringe", "uLight"]);
+  const UB = uni(PB, ["uRes", "uScale", "uHorizon", "uFloorGrid", "uShowPane", "uRegion", "uPc", "uPw", "uBg", "uLight"]);
+  const UF = uni(PF, ["uRes", "uScale", "uFrame", "uGrain"]);
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const pbuf = gl.createBuffer();
+  let N = 0;
+
+  // ---------- seeding: falling particles gather into streaks and shafts ----------
+  const hashJ = n => { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); };
+  const n1J = x => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return hashJ(i) + (hashJ(i + 1) - hashJ(i)) * u; };
+  const fbmJ = x => { let a = 0.5, s = 0; for (let i = 0; i < 4; i++) { s += a * n1J(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; };
+  function seed() {
+    N = Math.round(20000 + S.count / 100 * 280000);
+    const data = new Float32Array(N * 4);
+    const dens = 6 + S.density / 100 * 70, sh = S.shafts / 100;
+    const crestShare = 0.08 + S.crest / 100 * 0.35, hazeShare = S.haze / 100 * 0.12;
+    const weight = x => {
+      const st = Math.pow(fbmJ(x * dens), 1.7) * 1.9;
+      const shaft = Math.pow(Math.max(0, fbmJ(x * 3.2 + 7) - 0.48) / 0.52, 3) * sh;
+      const patch = 0.3 + 1.1 * Math.pow(fbmJ(x * 2.4 + 2), 2) * 1.6;
+      return st * patch * (1 + shaft * 3);
+    };
+    for (let i = 0; i < N; i++) {
+      const u = Math.random();
+      let kind = u < crestShare ? 1 : u < crestShare + hazeShare ? 2 : 0;
+      let x = Math.random(), w = 0.5;
+      if (kind === 0) {
+        // rejection sampling against the streak pattern
+        for (let tries = 0; tries < 16; tries++) { x = Math.random(); w = weight(x); if (Math.random() * 2.6 < w * w * 0.9) break; }
+        w = Math.min(0.999, w / 2.2);
+      } else if (kind === 1) {
+        w = Math.min(0.999, 0.2 + 0.8 * Math.pow(fbmJ(x * 2.4 + 2), 2) * 1.6);
+      }
+      data[i * 4] = x; data[i * 4 + 1] = Math.random(); data[i * 4 + 2] = Math.random(); data[i * 4 + 3] = kind + w * 0.5;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, pbuf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    dirty = true;
+  }
+  let seedTimer;
+  const scheduleSeed = () => { clearTimeout(seedTimer); seedTimer = setTimeout(seed, 120); };
+
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+  function bindQuad(p) { gl.bindBuffer(gl.ARRAY_BUFFER, quad); const a = gl.getAttribLocation(p, "a"); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0); }
+
+  function renderGL(W, H, t, frameNo, scale) {
+    if (glc.width !== W || glc.height !== H) { glc.width = W; glc.height = H; }
+    gl.viewport(0, 0, W, H);
+    const f = S.filter / 100 * (S.breathe === "on" ? 0.5 - 0.5 * Math.cos(t * 0.7) : 1);
+    const pc = S.sweep === "on" ? 0.5 + 0.36 * Math.sin(t * 0.4) : S.px;
+    const pw = 0.06 + S.pwidth / 100 * 0.6, horizon = 0.08 + S.horizon / 100 * 0.35;
+    const light = rgb(S.light);
+    // background
+    gl.disable(gl.BLEND);
+    gl.useProgram(PB); bindQuad(PB);
+    gl.uniform2f(UB.uRes, W, H); gl.uniform1f(UB.uScale, scale); gl.uniform1f(UB.uHorizon, horizon);
+    gl.uniform1f(UB.uFloorGrid, S.floorgrid / 100); gl.uniform1f(UB.uShowPane, S.pane === "on" ? 1 : 0);
+    gl.uniform1f(UB.uRegion, S.region === "pane" ? 1 : 0); gl.uniform1f(UB.uPc, pc); gl.uniform1f(UB.uPw, pw);
+    gl.uniform3fv(UB.uBg, rgb(S.bg)); gl.uniform3fv(UB.uLight, light);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // particles, additive
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(PP);
+    gl.bindBuffer(gl.ARRAY_BUFFER, pbuf);
+    const aS = gl.getAttribLocation(PP, "aSeed"); gl.enableVertexAttribArray(aS); gl.vertexAttribPointer(aS, 4, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(UP.uRes, W, H); gl.uniform1f(UP.uTime, t); gl.uniform1f(UP.uFrame, frameNo); gl.uniform1f(UP.uScale, scale);
+    gl.uniform1f(UP.uFilter, f); gl.uniform1f(UP.uRegion, S.region === "pane" ? 1 : 0); gl.uniform1f(UP.uPc, pc); gl.uniform1f(UP.uPw, pw);
+    gl.uniform1f(UP.uEdge, 0.004 + S.edge / 100 * 0.1);
+    gl.uniform1f(UP.uFreq, 0.4 + S.freq / 100 * 5); gl.uniform1f(UP.uHarm, S.harm / 100); gl.uniform1f(UP.uAmp, 0.2 + S.amp / 100 * 1.4);
+    gl.uniform1f(UP.uCrestY, 0.35 + S.height / 100 * 0.45); gl.uniform1f(UP.uNoise, S.noise / 100 * 1.4); gl.uniform1f(UP.uGrit, S.grit / 100); gl.uniform1f(UP.uSpikes, S.spikes / 100);
+    gl.uniform1f(UP.uLen, 0.04 + S.len / 100 * 0.6); gl.uniform1f(UP.uFall, 0.05 + S.fall / 100 * 0.6);
+    gl.uniform1f(UP.uScatter, S.scatter / 100 * 1.5); gl.uniform1f(UP.uSize, 1.0 + S.size / 100 * 5);
+    gl.uniform1f(UP.uExposure, (0.04 + S.exposure / 100 * 0.4) * Math.sqrt(170000 / N) * (W * H > 0 ? Math.sqrt(W * H / 1.2e6) : 1));
+    gl.uniform1f(UP.uHorizon, horizon); gl.uniform1f(UP.uFringe, S.fringe / 100); gl.uniform3fv(UP.uLight, light);
+    gl.uniform1f(UP.uPass, 0); gl.uniform1f(UP.uReflect, 0);
+    gl.drawArrays(gl.POINTS, 0, N);
+    if (S.reflect > 0) { gl.uniform1f(UP.uPass, 1); gl.uniform1f(UP.uReflect, S.reflect / 100 * 0.9); gl.drawArrays(gl.POINTS, 0, N); }
+    gl.disableVertexAttribArray(aS);
+    // finish: vignette (and grain) with normal blending
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(PF); bindQuad(PF);
+    gl.uniform2f(UF.uRes, W, H); gl.uniform1f(UF.uScale, scale); gl.uniform1f(UF.uFrame, frameNo); gl.uniform1f(UF.uGrain, S.grain / 100);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disable(gl.BLEND);
+  }
+
+  // ---------- type ----------
+  function drawType(c, W, H) {
+    if (S.type !== "on") return;
+    c.save();
+    c.fillStyle = S.light;
+    const fs = Math.max(9, Math.round(Math.min(W, H) * 0.021));
+    c.font = `400 ${fs}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    if ("letterSpacing" in c) c.letterSpacing = fs * 0.04 + "px";
+    const w2 = c.measureText((S.t2 || "").toUpperCase()).width;
+    const x0 = W / 2 - w2 / 2, y0 = H * 0.5;
+    c.fillText((S.t1 || "").toUpperCase(), x0, y0 - fs * 0.3);
+    c.fillText((S.t2 || "").toUpperCase(), x0, y0 + fs * 1.1);
+    c.font = `400 ${Math.round(fs * 0.7)}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    c.textAlign = "right"; c.globalAlpha = 0.7;
+    c.fillText((S.t3 || "").toUpperCase(), x0 + w2, y0 - fs * 0.3);
+    c.restore();
+  }
+
+  // ---------- layout & drag ----------
+  let dpr = 1, cssW = 0, cssH = 0;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const stage = $("stage"), bw = stage.clientWidth, bh = stage.clientHeight;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    dpr = Math.min(window.devicePixelRatio || 1, 2, 1700 / Math.max(w, h));
+    cssW = Math.round(w); cssH = Math.round(h);
+    out.style.width = cssW + "px"; out.style.height = cssH + "px";
+    out.width = Math.round(w * dpr); out.height = Math.round(h * dpr);
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe($("stage"));
+  let dragging = false;
+  const setPx = e => { const r = out.getBoundingClientRect(); S.px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); dirty = true; };
+  out.addEventListener("pointerdown", e => {
+    dragging = true; out.setPointerCapture(e.pointerId);
+    if (S.sweep === "on" || S.region !== "pane") { S.sweep = "off"; S.region = "pane"; syncUI(); }
+    setPx(e);
+  });
+  out.addEventListener("pointermove", e => { if (dragging) setPx(e); });
+  const endDrag = () => { if (dragging) { dragging = false; persist(); } };
+  out.addEventListener("pointerup", endDrag);
+  out.addEventListener("pointercancel", endDrag);
+  out.style.cursor = "ew-resize";
+
+  // ---------- loop ----------
+  let simT = 3, frameNo = 1, frameAcc = 0, last = performance.now();
+  function frame(W, H, scale, c) { renderGL(W, H, simT, frameNo, scale); c.drawImage(glc, 0, 0, W, H); drawType(c, W, H); }
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (playing) {
+      const sp = 0.15 + S.speed / 100 * 1.8;
+      simT += dt * sp; frameAcc += dt * sp * 24;
+      if (frameAcc >= 1) { frameNo += Math.floor(frameAcc); frameAcc %= 1; }
+    }
+    if ((playing || dirty) && out.width && N) { frame(out.width, out.height, dpr, octx); dirty = false; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export ----------
+  const dlReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+  $("exPng").onclick = () => {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const long = Math.min(3200, gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+    const W = aw >= ah ? long : Math.round(long * aw / ah), H = aw >= ah ? Math.round(long * ah / aw) : long;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    frame(W, H, W / cssW, c.getContext("2d"));
+    c.toBlob(b => { dirty = true; b ? saveFile("signal-particles.png", b) : status("PNG export failed"); }, "image/png");
+  };
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!out.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    if (!playing) { playing = true; syncUI(); }
+    const rec = new MediaRecorder(out.captureStream(60), { mimeType: mime, videoBitsPerSecond: 20e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false; $("exVid").disabled = false; $("exVid").textContent = "Record 8s";
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(`signal-particles-8s.${ext}`, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    recording = true; $("exVid").disabled = true; $("exVid").textContent = "Recording…";
+    rec.start(250);
+    setTimeout(() => rec.stop(), 8000);
+  };
+
+  // ---------- boot ----------
+  syncUI();
+  layout();
+  seed();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty = true; });
+  requestAnimationFrame(tick);
+})();
+</script>
