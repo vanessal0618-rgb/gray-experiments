@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Michroma&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, light stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 27px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 18px; }
+.swc { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .04em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #050505; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #e6e6e6; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Signal light controls">
+    <div class="ph"><b>SIGNAL LIGHT</b><span id="modeName">Filtering</span></div>
+
+    <div class="sec" id="filterCtl">
+      <span class="sub">Filter</span>
+      <div class="row"><span class="lbl">Region</span>
+        <div class="seg" role="group" aria-label="Filter region">
+          <button type="button" data-region="full">Full</button>
+          <button type="button" data-region="pane">Pane</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter glides back and forth across the light.">Sweep</span>
+        <div class="seg" role="group" aria-label="Sweep">
+          <button type="button" data-sweep="off">Off</button>
+          <button type="button" data-sweep="on">On</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter rises and falls, so the light moves from noise to a clear wave and back.">Breathe</span>
+        <div class="seg" role="group" aria-label="Breathe">
+          <button type="button" data-breathe="off">Off</button>
+          <button type="button" data-breathe="on">On</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl">Show pane</span>
+        <div class="seg" role="group" aria-label="Show the filter pane">
+          <button type="button" data-pane="on">On</button>
+          <button type="button" data-pane="off">Off</button>
+        </div>
+      </div>
+      <p class="hint">Drag on the image to move the filter.</p>
+    </div>
+
+    <div class="sec" id="signalCtl"><span class="sub">Signal</span></div>
+    <div class="sec" id="lightCtl"><span class="sub">Light</span></div>
+    <div class="sec" id="floorCtl"><span class="sub">Floor &amp; texture</span></div>
+
+    <div class="sec" id="colorCtl">
+      <span class="sub">Color</span>
+      <div class="chips" role="group" aria-label="Palette" id="palChips"></div>
+      <div class="sws">
+        <label class="swc"><input type="color" class="sw" data-col="bg">Ground</label>
+        <label class="swc"><input type="color" class="sw" data-col="light">Light</label>
+      </div>
+    </div>
+
+    <div class="sec" id="typeCtl">
+      <span class="sub">Type</span>
+      <div class="row"><span class="lbl">Show type</span>
+        <div class="seg" role="group" aria-label="Show type">
+          <button type="button" data-type="on">On</button>
+          <button type="button" data-type="off">Off</button>
+        </div>
+      </div>
+      <input class="txt" id="t1" maxlength="40" aria-label="First line">
+      <input class="txt" id="t2" maxlength="60" aria-label="Second line">
+      <input class="txt" id="t3" maxlength="12" aria-label="Corner label">
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="16:9">16:9</button>
+          <button type="button" data-ar="21:9">21:9</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="9:16">9:16</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record 8s</button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="play" type="button">Pause</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="out" aria-label="Signal light preview: a glowing waveform with curtains of light falling to a reflective floor"></canvas>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = id => document.getElementById(id);
+
+  const PALETTES = {
+    moon:   { name: "Moon",   bg: "#030303", light: "#e9e7e2" },
+    aurora: { name: "Aurora", bg: "#020504", light: "#b9ffd9" },
+    ice:    { name: "Ice",    bg: "#020306", light: "#c6dcff" },
+    iris:   { name: "Iris",   bg: "#040309", light: "#d9c8ff" },
+    ember:  { name: "Ember",  bg: "#060302", light: "#ffc08a" },
+    rose:   { name: "Rose",   bg: "#060304", light: "#ffc6dc" }
+  };
+  function defaults() {
+    return {
+      region: "pane", sweep: "on", breathe: "off", pane: "on", px: 0.6,
+      filter: 100, pwidth: 34, edge: 45,
+      freq: 22, harm: 35, amp: 60, height: 52, noise: 70, grit: 35, spikes: 30,
+      len: 70, density: 30, shafts: 50, glow: 55, haze: 45, fringe: 45, exposure: 60,
+      reflect: 60, horizon: 30, floorgrid: 35, grain: 30, speed: 35,
+      palette: "moon", bg: PALETTES.moon.bg, light: PALETTES.moon.light,
+      type: "on", t1: "GRAY ©", t2: "NO TRUST NEEDED · FROM NOISE TO SIGNAL", t3: "2026",
+      ar: "16:9"
+    };
+  }
+  const KEY = "signal-light-v1";
+  let S = defaults();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(defaults(), s); } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  let dirty = true;
+  const changed = () => { persist(); dirty = true; };
+
+  // ---------- sliders ----------
+  const SLIDERS = [
+    ["filter", "Filter", "How much noise is removed inside the filter. 100 leaves a clear wave.", "filterCtl"],
+    ["pwidth", "Pane width", "Width of the filtered region.", "filterCtl"],
+    ["edge", "Edge", "How gradually the light calms at the filter's edges.", "filterCtl"],
+    ["freq", "Frequency", "How many waves run across the frame.", "signalCtl"],
+    ["harm", "Harmonics", "Overtones layered into the clean wave.", "signalCtl"],
+    ["amp", "Amplitude", "Height of the wave.", "signalCtl"],
+    ["height", "Crest height", "Where the wave sits in the frame.", "signalCtl"],
+    ["noise", "Noise", "How jagged the unfiltered signal is.", "signalCtl"],
+    ["grit", "Grit", "Fine, fast-changing jitter in the noise.", "signalCtl"],
+    ["spikes", "Spikes", "Sudden sharp peaks in the noise.", "signalCtl"],
+    ["len", "Curtain", "How far the light falls below the wave.", "lightCtl"],
+    ["density", "Streaks", "How finely the falling light splits into streaks.", "lightCtl"],
+    ["shafts", "Shafts", "A few brighter beams that reach the floor.", "lightCtl"],
+    ["glow", "Crest glow", "Brightness of the wave's edge.", "lightCtl"],
+    ["haze", "Haze", "Soft light rising above the wave.", "lightCtl"],
+    ["fringe", "Fringe", "Warm and cool color along the crest, like light through a lens.", "lightCtl"],
+    ["exposure", "Exposure", "Overall brightness.", "lightCtl"],
+    ["reflect", "Reflection", "How strongly the floor mirrors the light.", "floorCtl"],
+    ["horizon", "Floor height", "Where the floor meets the wall.", "floorCtl"],
+    ["floorgrid", "Floor tiles", "Faint tile seams on the floor.", "floorCtl"],
+    ["grain", "Grain", "Film grain.", "floorCtl"],
+    ["speed", "Speed", "How fast everything moves.", "floorCtl"]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="0" max="100" step="1"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent);
+    host.insertBefore(w, parent === "filterCtl" ? host.querySelector(".row") : null);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncSlider(k); changed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k], v = S[k];
+    input.value = v; bub.textContent = v;
+    bub.style.left = `calc(${v / 100} * (100% - 24px))`;
+  }
+
+  for (const [id, p] of Object.entries(PALETTES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.pal = id;
+    b.innerHTML = `<i style="background:linear-gradient(180deg, ${p.light}, ${p.bg}); box-shadow: 0 0 0 1px #3a3b3f"></i>${p.name}`;
+    b.onclick = () => { S.palette = id; S.bg = p.bg; S.light = p.light; syncUI(); changed(); };
+    $("palChips").appendChild(b);
+  }
+  document.querySelectorAll("[data-col]").forEach(inp => inp.addEventListener("input", () => { S[inp.dataset.col] = inp.value; S.palette = "custom"; syncUI(); changed(); }));
+  for (const key of ["region", "sweep", "breathe", "pane", "type", "ar"])
+    document.querySelectorAll(`[data-${key}]`).forEach(b => b.onclick = () => {
+      S[key] = b.dataset[key];
+      if (key === "sweep" && S.sweep === "on") S.region = "pane";
+      syncUI(); if (key === "ar") layout(); changed();
+    });
+  for (const id of ["t1", "t2", "t3"]) $(id).addEventListener("input", e => { S[id] = e.target.value; changed(); });
+
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = defaults(); syncUI(); layout(); changed(); status("Reset to defaults"); };
+
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    for (const k of ["region", "sweep", "breathe", "pane", "type", "ar"]) press(k, S[k]);
+    press("pal", S.palette);
+    document.querySelectorAll("[data-col]").forEach(inp => inp.value = S[inp.dataset.col]);
+    for (const id of ["t1", "t2", "t3"]) if ($(id).value !== S[id]) $(id).value = S[id];
+    $("modeName").textContent = S.region === "full" ? "Full filter" : S.sweep === "on" ? "Sweeping" : "Filtering";
+    $("play").textContent = playing ? "Pause" : "Play";
+  }
+
+  // ---------- WebGL ----------
+  const glc = document.createElement("canvas");
+  const gl = glc.getContext("webgl", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+  const out = $("out"), octx = out.getContext("2d");
+  if (!gl) { $("stage").innerHTML = '<div class="err">This tool needs WebGL, which isn\'t available in this browser. Try a recent Chrome, Safari or Firefox with hardware acceleration on.</div>'; return; }
+  const VS = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uFrame, uScale;
+uniform float uFilter, uRegion, uPc, uPw, uEdge, uShowPane;
+uniform float uFreq, uHarm, uAmp, uCrestY, uNoise, uGrit, uSpikes;
+uniform float uLen, uDensity, uShafts, uGlow, uHaze, uFringe, uExposure;
+uniform float uReflect, uHorizon, uFloorGrid, uGrain;
+uniform vec3 uBg, uLight;
+
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+float fbm1(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 5; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; }
+float n2(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1., 0.)), u.x), mix(hash2(i + vec2(0., 1.)), hash2(i + vec2(1., 1.)), u.x), u.y); }
+
+float filt(float x){
+  if (uRegion < 0.5) return uFilter;
+  float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5;
+  return uFilter * smoothstep(l - uEdge, l + uEdge, x) * (1. - smoothstep(r - uEdge, r + uEdge, x));
+}
+// The signal: a clean wave where filtered, noise where not.
+float crest(float x){
+  float c = filt(x);
+  float w = 6.2831853 * uFreq * x + uTime * 0.5;
+  float clean = (sin(w) + uHarm * (0.5 * sin(2. * w + uTime * 0.3) + 0.3 * sin(3. * w - uTime * 0.2))) / (1. + uHarm * 0.8);
+  float nz = (fbm1(x * 22. + uTime * 0.35) * 2. - 1.) * 1.3;
+  nz += (hash(floor(x * uRes.x / (3. * uScale)) + uFrame * 13.1) - 0.5) * uGrit * 0.7;
+  nz += pow(max(0., n1(x * 38. + uTime * 2.) - 0.72) / 0.28, 2.) * uSpikes * 1.6 * (n1(x * 38. + 5.) > 0.5 ? 1. : -1.);
+  float y = (0.35 + 0.65 * c) * clean * uAmp + (1. - c) * nz * uNoise * 0.6;
+  return uCrestY + 0.15 * y;
+}
+vec3 wall(vec2 uv){
+  float x = uv.x, y = uv.y, asp = uRes.x / uRes.y, sx = x * asp;
+  float cy = crest(x), d = cy - y, c = filt(x);
+  float waver = 0.004 * sin(y * 18. + uTime * 0.7 + x * 30.) * (1. - 0.6 * c);
+  float st = pow(fbm1((sx + waver) * uDensity), 1.7) * 1.9;
+  float fall = 0.7 + 0.3 * n2(vec2(sx * uDensity * 0.45, y * 7. + uTime * 1.3));
+  float flick = 1. + (1. - c) * 0.6 * (hash(floor(sx * uDensity * 0.4) + uFrame * 3.7) - 0.5);
+  float shaft = pow(max(0., fbm1(sx * 3.2 + 7.) - 0.48) / 0.52, 3.) * uShafts;
+  float L = uLen * (0.35 + 0.65 * fbm1(sx * uDensity * 0.3 + 11.)) * (1. + shaft * 2.);
+  float patch = 0.3 + 1.1 * pow(fbm1(sx * 2.4 + uTime * 0.04 + 2.), 2.) * 1.6;
+  st *= patch;
+  float I = 0.;
+  if (d > 0.) I += exp(-d / L) * st * fall * flick * (0.8 + shaft * 2.5);
+  else I += exp(d / 0.025) * uHaze * 0.5 + exp(d / 0.3) * st * 0.14 * uHaze + exp(d / 0.55) * shaft * 0.35 * uHaze;
+  float line = exp(-abs(d) / (0.0035 + (1. - c) * 0.003)) * uGlow * (0.35 + 0.9 * patch);
+  I += line * (0.6 + 0.4 * st) + exp(-abs(d) / 0.02) * uGlow * 0.18 * patch;
+  vec3 col = uLight * I;
+  vec3 warm = vec3(1.0, 0.72, 0.45), cool = vec3(0.5, 0.7, 1.0);
+  col += uFringe * exp(-abs(d) / 0.008) * uGlow * 0.35 * (d > 0. ? cool : warm);
+  return col;
+}
+void main(){
+  vec2 frag = gl_FragCoord.xy, uv = frag / uRes;
+  vec3 col;
+  if (uv.y >= uHorizon) {
+    col = wall(uv);
+  } else {
+    float depth = (uHorizon - uv.y) / uHorizon;
+    float yr = uHorizon + (uHorizon - uv.y) * 1.5;
+    float dx = 0.003 + depth * 0.006;
+    vec3 refl = (wall(vec2(uv.x - dx, yr)) + 2. * wall(vec2(uv.x, yr)) + wall(vec2(uv.x + dx, yr))) * 0.25;
+    col = refl * uReflect * exp(-depth * 2.0);
+    col += wall(vec2(uv.x, uHorizon + 0.002)) * 0.22 * exp(-depth * 5.);
+    col += uLight * 0.018 * (1. - depth);
+    float z = 1. / (depth + 0.06);
+    float u = (uv.x - 0.5) * (uRes.x / uRes.y) * z * 0.5;
+    float lx = abs(fract(u) - 0.5), lz = abs(fract(z * 0.18) - 0.5);
+    float seam = max(1. - smoothstep(0., 0.012 * z, lx), 1. - smoothstep(0., 0.02, lz));
+    col += uLight * 0.03 * uFloorGrid * seam * (0.4 + 0.6 * (1. - depth));
+  }
+  if (uShowPane > 0.5 && uRegion > 0.5) {
+    float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5, px = uScale / uRes.x;
+    float e = exp(-abs(uv.x - l) / (1.2 * px)) + exp(-abs(uv.x - r) / (1.2 * px));
+    float body = smoothstep(l - px, l + px, uv.x) * (1. - smoothstep(r - px, r + px, uv.x));
+    float fadeY = uv.y >= uHorizon ? 1. : 0.35 * exp(-(uHorizon - uv.y) / uHorizon * 2.);
+    col += uLight * (e * 0.08 + body * 0.012) * fadeY;
+  }
+  col = 1. - exp(-col * uExposure);
+  vec2 q = uv - 0.5;
+  col *= smoothstep(1.05, 0.25, length(q * vec2(1.0, 1.25)));
+  col += (hash2(frag / uScale + fract(uFrame * 0.618) * 97.) - 0.5) * uGrain * 0.09;
+  gl_FragColor = vec4(clamp(uBg + col, 0., 1.), 1.);
+}`;
+  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aLoc = gl.getAttribLocation(prog, "a"); gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+  const U = {};
+  for (const n of ["uRes", "uTime", "uFrame", "uScale", "uFilter", "uRegion", "uPc", "uPw", "uEdge", "uShowPane", "uFreq", "uHarm", "uAmp", "uCrestY", "uNoise", "uGrit", "uSpikes", "uLen", "uDensity", "uShafts", "uGlow", "uHaze", "uFringe", "uExposure", "uReflect", "uHorizon", "uFloorGrid", "uGrain", "uBg", "uLight"])
+    U[n] = gl.getUniformLocation(prog, n);
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+
+  function renderGL(W, H, t, frameNo, scale) {
+    if (glc.width !== W || glc.height !== H) { glc.width = W; glc.height = H; }
+    gl.viewport(0, 0, W, H);
+    const f = S.filter / 100 * (S.breathe === "on" ? 0.5 - 0.5 * Math.cos(t * 0.7) : 1);
+    const pc = S.sweep === "on" ? 0.5 + 0.36 * Math.sin(t * 0.4) : S.px;
+    gl.uniform2f(U.uRes, W, H);
+    gl.uniform1f(U.uTime, t);
+    gl.uniform1f(U.uFrame, frameNo);
+    gl.uniform1f(U.uScale, scale);
+    gl.uniform1f(U.uFilter, f);
+    gl.uniform1f(U.uRegion, S.region === "pane" ? 1 : 0);
+    gl.uniform1f(U.uPc, pc);
+    gl.uniform1f(U.uPw, 0.06 + S.pwidth / 100 * 0.6);
+    gl.uniform1f(U.uEdge, 0.004 + S.edge / 100 * 0.1);
+    gl.uniform1f(U.uShowPane, S.pane === "on" ? 1 : 0);
+    gl.uniform1f(U.uFreq, 0.4 + S.freq / 100 * 5);
+    gl.uniform1f(U.uHarm, S.harm / 100);
+    gl.uniform1f(U.uAmp, 0.2 + S.amp / 100 * 1.4);
+    gl.uniform1f(U.uCrestY, 0.35 + S.height / 100 * 0.45);
+    gl.uniform1f(U.uNoise, S.noise / 100 * 1.4);
+    gl.uniform1f(U.uGrit, S.grit / 100);
+    gl.uniform1f(U.uSpikes, S.spikes / 100);
+    gl.uniform1f(U.uLen, 0.04 + S.len / 100 * 0.6);
+    gl.uniform1f(U.uDensity, 8 + S.density / 100 * 90);
+    gl.uniform1f(U.uShafts, S.shafts / 100);
+    gl.uniform1f(U.uGlow, S.glow / 100 * 2);
+    gl.uniform1f(U.uHaze, S.haze / 100);
+    gl.uniform1f(U.uFringe, S.fringe / 100);
+    gl.uniform1f(U.uExposure, 0.4 + S.exposure / 100 * 2.6);
+    gl.uniform1f(U.uReflect, S.reflect / 100 * 1.2);
+    gl.uniform1f(U.uHorizon, 0.08 + S.horizon / 100 * 0.35);
+    gl.uniform1f(U.uFloorGrid, S.floorgrid / 100);
+    gl.uniform1f(U.uGrain, S.grain / 100);
+    gl.uniform3fv(U.uBg, rgb(S.bg)); gl.uniform3fv(U.uLight, rgb(S.light));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // ---------- type ----------
+  function drawType(c, W, H) {
+    if (S.type !== "on") return;
+    c.save();
+    c.fillStyle = S.light;
+    const fs = Math.max(9, Math.round(Math.min(W, H) * 0.021));
+    c.font = `400 ${fs}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    if ("letterSpacing" in c) c.letterSpacing = fs * 0.04 + "px";
+    const w2 = c.measureText((S.t2 || "").toUpperCase()).width;
+    const x0 = W / 2 - w2 / 2 + fs * 1.2, y0 = H * 0.5;
+    // small three-blade mark
+    c.save(); c.translate(x0 - fs * 1.9, y0 + fs * 0.1);
+    for (let i = 0; i < 3; i++) { c.rotate(Math.PI * 2 / 3); c.beginPath(); c.ellipse(0, -fs * 0.55, fs * 0.22, fs * 0.6, 0, 0, Math.PI * 2); c.fill(); }
+    c.restore();
+    c.fillText((S.t1 || "").toUpperCase(), x0, y0 - fs * 0.3);
+    c.fillText((S.t2 || "").toUpperCase(), x0, y0 + fs * 1.1);
+    c.font = `400 ${Math.round(fs * 0.7)}px Michroma, "Helvetica Neue", Arial, sans-serif`;
+    c.textAlign = "right";
+    c.globalAlpha = 0.7;
+    c.fillText((S.t3 || "").toUpperCase(), x0 + w2, y0 - fs * 0.3);
+    c.restore();
+  }
+
+  // ---------- layout & drag ----------
+  let dpr = 1, cssW = 0, cssH = 0;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const stage = $("stage"), bw = stage.clientWidth, bh = stage.clientHeight;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    dpr = Math.min(window.devicePixelRatio || 1, 2, 1700 / Math.max(w, h));
+    cssW = Math.round(w); cssH = Math.round(h);
+    out.style.width = cssW + "px"; out.style.height = cssH + "px";
+    out.width = Math.round(w * dpr); out.height = Math.round(h * dpr);
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe($("stage"));
+  let dragging = false;
+  const setPx = e => { const r = out.getBoundingClientRect(); S.px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); dirty = true; };
+  out.addEventListener("pointerdown", e => {
+    dragging = true; out.setPointerCapture(e.pointerId);
+    if (S.sweep === "on" || S.region !== "pane") { S.sweep = "off"; S.region = "pane"; syncUI(); }
+    setPx(e);
+  });
+  out.addEventListener("pointermove", e => { if (dragging) setPx(e); });
+  const endDrag = () => { if (dragging) { dragging = false; persist(); } };
+  out.addEventListener("pointerup", endDrag);
+  out.addEventListener("pointercancel", endDrag);
+  out.style.cursor = "ew-resize";
+
+  // ---------- loop ----------
+  let simT = 3, frameNo = 1, frameAcc = 0, last = performance.now();
+  function frame(W, H, scale, c) { renderGL(W, H, simT, frameNo, scale); c.drawImage(glc, 0, 0, W, H); drawType(c, W, H); }
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (playing) {
+      const sp = 0.15 + S.speed / 100 * 1.8;
+      simT += dt * sp; frameAcc += dt * sp * 24;
+      if (frameAcc >= 1) { frameNo += Math.floor(frameAcc); frameAcc %= 1; }
+    }
+    if ((playing || dirty) && out.width) { frame(out.width, out.height, dpr, octx); dirty = false; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export ----------
+  const dlReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+  $("exPng").onclick = () => {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const long = Math.min(3200, gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+    const W = aw >= ah ? long : Math.round(long * aw / ah), H = aw >= ah ? Math.round(long * ah / aw) : long;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    frame(W, H, W / cssW, c.getContext("2d"));
+    c.toBlob(b => { dirty = true; b ? saveFile("signal-light.png", b) : status("PNG export failed"); }, "image/png");
+  };
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!out.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    if (!playing) { playing = true; syncUI(); }
+    const rec = new MediaRecorder(out.captureStream(60), { mimeType: mime, videoBitsPerSecond: 18e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false; $("exVid").disabled = false; $("exVid").textContent = "Record 8s";
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(`signal-light-8s.${ext}`, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    recording = true; $("exVid").disabled = true; $("exVid").textContent = "Recording…";
+    rec.start(250);
+    setTimeout(() => rec.stop(), 8000);
+  };
+
+  // ---------- boot ----------
+  syncUI();
+  layout();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty = true; });
+  requestAnimationFrame(tick);
+})();
+</script>
