@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gray — The World's Inference, Filtered</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Michroma&display=swap">
+<style>
+/* Layout: full-bleed hero. Signal animation fills the frame; block navigation top right, headline bottom left, calls to action bottom right. */
+:root {
+  --ground: #181818;
+  --ink: #f2f2f0;
+  --muted: #9b9b9b;
+  --bar: #c9c9c7;
+  --bar-ink: #111111;
+  --block: #575757;
+  --block-hi: #686868;
+  --block-2: #3b3b3b;
+  --sans: "Geist", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.hero { position: relative; min-height: 100svh; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; padding-inline: 27px; padding-block: 10px 28px; }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(120% 60% at 0% 100%, rgba(24,24,24,.82) 0%, rgba(24,24,24,.55) 35%, rgba(24,24,24,0) 65%); }
+
+/* navigation blocks */
+.nav { position: relative; z-index: 1; justify-self: end; width: min(456px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin-right: -13px; }
+.nav .brand { grid-column: 1 / -1; height: 32px; background: var(--bar); color: var(--bar-ink); border-radius: 2px; display: flex; align-items: center; gap: 9px; padding: 0 13px; font-size: 13px; font-weight: 500; }
+.nav .brand svg { width: 20px; height: 16px; }
+.nav .links { display: grid; gap: 3px; }
+.nav .links a, .nav .console { background: var(--block); border-radius: 2px; font-size: 13px; font-weight: 500; transition: background-color .15s; }
+.nav .links a { height: 32px; display: flex; align-items: center; padding: 0 13px; }
+.nav .console { background: var(--block-hi); display: flex; flex-direction: column; justify-content: space-between; padding: 11px 13px 9px; min-height: 102px; }
+.nav .console span:last-child { align-self: flex-end; font-size: 16px; line-height: 1; }
+.nav .links a:hover { background: #636363; }
+.nav .console:hover { background: #777777; }
+
+/* headline */
+.copy { position: relative; z-index: 1; align-self: end; display: grid; gap: 14px; max-width: 640px; pointer-events: none; }
+.eyebrow { font-size: 11px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; margin: 0 0 10px; }
+h1 { margin: 0; font-weight: 400; font-size: calc(clamp(32px, 2.95vw, 44px) * var(--hfs, 1)); line-height: 1.05; letter-spacing: -0.012em; text-wrap: balance; }
+.sub { margin: 0; font-size: calc(clamp(19px, 1.85vw, 27px) * var(--hfs, 1)); line-height: 1.22; color: var(--muted); letter-spacing: -0.005em; max-width: 26ch; }
+
+/* calls to action */
+.ctas { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, 225px); gap: 3px; align-self: end; justify-self: end; }
+.ctas a { height: 75px; border-radius: 2px; padding: 11px 13px; display: flex; justify-content: space-between; align-items: flex-start; font-size: 13px; font-weight: 500; transition: background-color .15s; }
+.ctas a:first-child { background: var(--block); }
+.ctas a:last-child { background: var(--block-2); }
+.ctas a:first-child:hover { background: #666666; }
+.ctas a:last-child:hover { background: #474747; }
+.ctas svg, .console svg { width: 13px; height: 13px; }
+
+.bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; position: relative; z-index: 1; }
+
+/* filter stage labels */
+.stages { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.stages span { position: absolute; transform: translate(-50%, -100%); font: 500 10px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; padding-bottom: 10px; }
+.stages span b { font-weight: 500; color: var(--ink); margin-right: .8em; }
+.stages .end { transform: translate(0, -50%); padding: 0; }
+.stages .end.r { transform: translate(-100%, -50%); }
+@media (max-width: 760px) { .stages span { font-size: 8px; letter-spacing: .08em; } }
+
+/* lockup */
+.lockup { position: absolute; left: 50%; top: var(--ly, 50%); transform: translate(-50%, -50%); z-index: 1; pointer-events: none;
+  font-family: Michroma, "Helvetica Neue", Arial, sans-serif; color: var(--ink); text-transform: uppercase; white-space: nowrap;
+  font-size: clamp(13px, 1.42vw, 21px); line-height: 1.15; letter-spacing: .01em; display: grid; gap: var(--lgap, .22em); }
+.lockup .l1, .lockup #lk2 { font-size: calc(var(--lfs, 1) * 1em); }
+.lockup .l1 { display: flex; justify-content: space-between; align-items: baseline; gap: 2em; }
+.lockup .yr { font-size: .62em; color: var(--muted); letter-spacing: .04em; }
+.lockup .lsub { font-family: var(--sans); text-transform: none; letter-spacing: -0.005em; font-size: calc(var(--lsz, 0.95) * 1em); line-height: 1.3; color: var(--muted); margin-top: calc((var(--lsgap, 0.8em) - var(--lgap, .22em)) / var(--lsz, 0.95)); white-space: normal; max-width: var(--lsw, 34em); }
+.lockup .lsub:empty { display: none; }
+.hero[data-type="lockup"] .copy { display: none; }
+.hero[data-type="lockup"] .bottom { grid-template-columns: minmax(0, 1fr); }
+.hero[data-type="lockup"] .ctas { justify-self: center; }
+.hero[data-type="lockup"] .nav { justify-self: center; margin-right: 0; }
+.hero[data-type="headline"] .lockup { display: none; }
+@media (max-width: 760px) { .lockup { white-space: normal; width: 100%; font-size: 13px; } }
+
+/* tuning panel (a design-time tool; remove before shipping) */
+.tune-btn { position: fixed; left: 14px; top: 10px; z-index: 6; height: 32px; padding: 0 12px; border: 0; border-radius: 2px; background: var(--block-2); color: var(--ink); font: 500 12px/1 var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.tune-btn:hover { background: #474747; }
+.tune-btn kbd { font: 500 10px/1 var(--sans); color: var(--muted); border: 1px solid #555; border-radius: 2px; padding: 2px 4px; }
+.tune { position: fixed; left: 14px; top: 46px; z-index: 6; width: 290px; max-height: calc(100svh - 58px); overflow-y: auto; background: rgba(22,22,22,.92); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid #2e2e2e; border-radius: 3px; padding: 6px 14px 14px; font-size: 12px; scrollbar-width: thin; scrollbar-color: #444 transparent; }
+.tune[hidden] { display: none; }
+.tune h3 { margin: 14px 0 6px; font-size: 10px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tune .r { display: grid; grid-template-columns: 92px minmax(0, 1fr) 30px; align-items: center; gap: 8px; height: 26px; }
+.tune .r label { color: #d4d4d2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+.tune input[type=range] { width: 100%; accent-color: #d8d8d5; margin: 0; }
+.tune output { font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; font-size: 11px; }
+.tune input[type=color] { width: 30px; height: 20px; padding: 0; border: 1px solid #444; border-radius: 2px; background: none; cursor: pointer; }
+.tune .seg { display: inline-flex; border: 1px solid #444; border-radius: 2px; overflow: hidden; }
+.tune .seg button { border: 0; background: transparent; color: var(--muted); font: 500 11px/1 var(--sans); padding: 5px 9px; cursor: pointer; }
+.tune .seg button[aria-pressed="true"] { background: #d8d8d5; color: #111; }
+.tune .grads { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 6px 0 4px; }
+.tune .grads button { height: 18px; border: 1px solid #444; border-radius: 2px; cursor: pointer; padding: 0; }
+.tune .grads button[aria-pressed="true"] { outline: 2px solid #e6e6e4; outline-offset: 1px; }
+.tune input[type=text] { width: 100%; height: 26px; background: #111; color: #ddd; border: 1px solid #333; border-radius: 2px; font: 11px var(--sans); padding: 0 6px; }
+.tune .tr { margin-top: 6px; }
+.tune .acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; margin-top: 14px; }
+.tune .acts button { height: 30px; border: 0; border-radius: 2px; background: var(--block); color: var(--ink); font: 500 11px/1 var(--sans); cursor: pointer; }
+.tune .acts button:hover { background: #666; }
+.tune textarea { width: 100%; margin-top: 8px; height: 64px; background: #111; color: #ddd; border: 1px solid #333; border-radius: 2px; font: 10px/1.4 ui-monospace, Menlo, monospace; padding: 6px; resize: vertical; }
+.tune .note { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; min-height: 15px; }
+
+@media (max-width: 760px) {
+  .tune { width: calc(100% - 28px); max-height: 60svh; }
+  .hero { padding-top: 50px; }
+  .tune-btn { position: absolute; }
+  .hero { padding-inline: 16px; padding-block: 52px 18px; }
+  .lockup { position: static; transform: none; align-self: center; justify-self: center; margin-block: 24px; }
+  .nav { width: 100%; margin-right: 0; }
+  .nav .console { min-height: 0; }
+  .bottom { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .ctas { grid-template-columns: 1fr 1fr; width: 100%; justify-self: stretch; }
+  .ctas a { height: 64px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="hero" id="hero">
+  <canvas id="sig" aria-hidden="true"></canvas>
+  <button class="tune-btn" id="tuneBtn" type="button" aria-expanded="false" aria-controls="tune">Adjust animation <kbd>T</kbd></button>
+  <div class="tune" id="tune" hidden role="region" aria-label="Animation controls"></div>
+
+  <nav class="nav" aria-label="Main">
+    <a class="brand" href="#" aria-label="Gray, home">
+      <svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M2 2h16M4 15l6-9 6 9"/></svg>
+      Gray
+    </a>
+    <div class="links">
+      <a href="#security">Security</a>
+      <a href="#routing">Routing</a>
+      <a href="#models">Models</a>
+    </div>
+    <a class="console" href="#console"><span>Open Console</span><span aria-hidden="true"><svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 6.5h10M7 2.5l4 4-4 4"/></svg></span></a>
+  </nav>
+
+  <div></div>
+
+  <div class="stages" id="stages" aria-hidden="true"></div>
+  <div class="lockup" id="lockup" aria-label="Gray, no trust needed, from noise to signal">
+    <div class="l1"><span id="lk1">Gray ©</span><span class="yr" id="lk3">2026</span></div>
+    <div id="lk2">No trust needed · From noise to signal</div>
+    <p class="lsub" id="lk4">Gray runs every request through privacy, integrity and security filters</p>
+  </div>
+
+  <div class="bottom">
+    <div class="copy">
+      <div>
+        <p class="eyebrow">Purified inference</p>
+        <h1>The World’s Inference, Filtered.</h1>
+      </div>
+      <p class="sub">Gray runs every request through privacy, integrity and security filters</p>
+    </div>
+    <div class="ctas">
+      <a href="#api-key">Get API key <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1 6.5h10M7 2.5l4 4-4 4"/></svg></a>
+      <a href="#docs">Read the Docs <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1 6.5h10M7 2.5l4 4-4 4"/></svg></a>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // The tuned Signal Ink look, recolored for the dark hero.
+  // Approved look (Oct 28): strands in a pane filter, with fine particles.
+  // Working look (Oct 28): one filter line that follows the cursor; strands converge onto it.
+  const DEFAULTS = {
+    "style": "strands",
+    "sshape": "edge",
+    "render": "lines",
+    "typeMode": "headline",
+    "lk1": "Gray ©",
+    "lk2": "The World’s Inference, Filtered.",
+    "lk3": "2026",
+    "lky": 50,
+    "lgap": 45,
+    "lk4": "Gray runs every request through privacy, integrity and security filters",
+    "lsgap": 14,
+    "lsz": 5,
+    "lfs": 24,
+    "lsw": 23,
+    "hfs": 21,
+    "scount": 35,
+    "spread": 80,
+    "sthick": 0,
+    "glow": 100,
+    "haze": 10,
+    "twist": 40,
+    "camp": 2,
+    "sfreq": 60,
+    "snoise": 0,
+    "pointer": "on",
+    "sweep": "hold",
+    "hold": 70,
+    "filter": 100,
+    "pwidth": 87,
+    "edge": 66,
+    "freq": 22,
+    "harm": 0,
+    "amp": 43,
+    "height": 52,
+    "noise": 100,
+    "grit": 43,
+    "spikes": 37,
+    "body": 60,
+    "weight": 0,
+    "edgek": 100,
+    "blur": 45,
+    "parts": 55,
+    "psize": 14,
+    "pdark": 30,
+    "rise": 55,
+    "grain": 100,
+    "vignette": 100,
+    "speed": 67,
+    "bg": "#181818",
+    "ink": "#c6c6c3",
+    "cmode": "mono",
+    "gpal": "iris",
+    "g0": "#4a6cf7",
+    "g1": "#a35cf0",
+    "g2": "#f27ad6",
+    "drift": 30,
+    "stages": "4",
+    "stgLabels": "off",
+    "span": 54,
+    "paneH": 60,
+    "panes": 100,
+    "pulse": 0,
+    "pulseSpd": 100,
+    "lblIn": "Request",
+    "lblOut": "What leaves",
+    "ggap": 32
+  };
+  const KEY = "gray-hero-tuning-v8";
+  let S = Object.assign({}, DEFAULTS);
+  try { const v = JSON.parse(localStorage.getItem(KEY) || "null"); if (v) S = Object.assign({}, DEFAULTS, v); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  let px = S.sweep === "hold" ? S.hold / 100 : 0.5, target = px, lastMove = -10;
+  const cv = document.getElementById("sig"), hero = document.getElementById("hero");
+  const gl = cv.getContext("webgl", { antialias: false, premultipliedAlpha: false, alpha: false });
+  if (!gl) return;
+  const VS = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uFrame, uScale;
+uniform float uFilter, uRegion, uPc, uPw, uEdge;
+uniform float uFreq, uHarm, uAmp, uCrestY, uNoise, uGrit, uSpikes;
+uniform float uBody, uWeight, uEdgeK, uSpray, uDot, uStipple, uBlur, uGrain, uVig;
+uniform vec3 uBg, uInk;
+uniform float uMode, uDrift; uniform vec3 uG0, uG1, uG2;
+vec3 grad3(float t){ t = clamp(t, 0., 1.); return t < 0.5 ? mix(uG0, uG1, t * 2.) : mix(uG1, uG2, (t - 0.5) * 2.); }
+// 0: mono. 1: gradient across the whole signal. 2: gradient only where the filter has cleaned it.
+vec3 inkCol(float x, float focus){
+  if (uMode < 0.5) return uInk;
+  vec3 g = grad3(x + 0.22 * sin(uTime * 0.12) * uDrift);
+  return uMode < 1.5 ? g : mix(uInk * 0.85, g, focus);
+}
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+float fbm1(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 5; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; }
+float fbmLo(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 2; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s / 0.75 * 0.9375; }
+
+float filt(float x){
+  if (uRegion < 0.5) return uFilter;
+  float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5;
+  return uFilter * smoothstep(l - uEdge, l + uEdge, x) * (1. - smoothstep(r - uEdge, r + uEdge, x));
+}
+// The signal. Unfocused noise uses fewer octaves, so it reads as blurred.
+float crest(float x, float c){
+  float w = 6.2831853 * uFreq * x + uTime * 0.45;
+  float clean = (sin(w) + uHarm * (0.55 * sin(2. * w + 0.7) + 0.35 * sin(3. * w + uTime * 0.2) + 0.2 * sin(5. * w))) / (1. + uHarm);
+  clean = sign(clean) * pow(abs(clean), 0.85);
+  float b = (1. - c) * uBlur;
+  float nzHi = fbm1(x * 20. + uTime * 0.3) * 2. - 1.;
+  float nzLo = fbmLo(x * 20. + uTime * 0.3) * 2. - 1.;
+  float nz = mix(nzHi, nzLo, b) * 1.3;
+  nz += (hash(floor(x * 180.) + uFrame * 13.1) - 0.5) * uGrit * 0.6 * (1. - b);
+  nz += pow(max(0., n1(x * 30. + uTime * 1.5) - 0.7) / 0.3, 2.) * uSpikes * 1.6;
+  float y = (0.35 + 0.65 * c) * clean * uAmp + (1. - c) * nz * uNoise * 0.6;
+  return uCrestY + 0.17 * y;
+}
+void main(){
+  vec2 frag = gl_FragCoord.xy, uv = frag / uRes;
+  float x = uv.x, y = uv.y, asp = uRes.x / uRes.y;
+  float c = filt(x);
+  float focus = c;
+  float b = (1. - c) * uBlur;
+  float cy = crest(x, c);
+  // blur also spreads the wave sideways: average neighbouring crests
+  if (b > 0.01) { float dx = 0.012 * b; cy = (cy * 2. + crest(x - dx, c) + crest(x + dx, c)) * 0.25; }
+  float d = cy - y;                   // > 0 below the crest
+  float peak = clamp((cy - uCrestY) / (0.17 * max(uAmp, 0.2)) * 1.4, 0., 1.);
+  // ink: a crisp top edge, a body bleeding down, softened by blur
+  float ew = mix(mix(0.002, 0.012, 1. - uEdgeK), 0.0012, focus) + b * 0.05;
+  float top = d < 0. ? exp(d / ew) : 1.;
+  float L = uBody * (0.45 + 0.75 * fbm1(x * asp * 9. + 3.)) * (0.6 + 0.8 * peak) + b * 0.08;
+  float body = d > 0. ? exp(-d / L) : 1.;
+  float streak = 0.82 + 0.18 * fbm1(x * asp * 60. + 7.);
+  float ink = top * body * streak * uWeight * (1. + b * 0.25);
+  float v = clamp(ink, 0., 1.);
+  vec3 paper = uBg * (1. - uVig * 0.18 * smoothstep(0.35, 0.95, length((uv - 0.5) * vec2(1.1, 1.))));
+  vec3 col = mix(paper, inkCol(x, focus), clamp(v, 0., 1.));
+  col += (hash2(frag / uScale + fract(uFrame * 0.618) * 31.) - 0.5) * uGrain * 0.05;
+  gl_FragColor = vec4(clamp(col, 0., 1.), 1.);
+}`;
+  const HEAD = FS.slice(0, FS.indexOf("void main(){"));
+  const PVS = HEAD + `
+attribute vec4 aP;
+uniform float uParts, uPSize, uRise;
+varying float vA; varying float vSoft; varying vec3 vC;
+void main(){
+  float r1 = aP.x, r2 = aP.y, r3 = aP.z, r4 = aP.w;
+  float x = r1;
+  float c = filt(x), b = (1. - c) * uBlur;
+  float cy = crest(x, c);
+  float y, a, size;
+  if (r4 < 0.72) {
+    // dust lifting off the wave and drifting up
+    float life = fract(r2 + uTime * 0.06 * (0.4 + r3));
+    float off = -log(1. - r3 * 0.985) * (0.012 + 0.05 * uRise);
+    y = cy + off + life * 0.12 * uRise;
+    x += (n1(r1 * 40. + uTime * 0.6) - 0.5) * 0.01 * (1. - c) + (life - 0.5) * 0.01 * (r2 - 0.5);
+    a = (1. - life) * exp(-off * 9.);
+  } else {
+    // a few grains settling inside the ink below the wave
+    float dd = pow(r3, 1.6) * 0.22;
+    y = cy - dd;
+    x += (hash(r2 * 9.1) - 0.5) * 0.004;
+    a = 0.55 * exp(-dd * 7.);
+  }
+  // noisy, unfiltered dust is plentiful and soft; inside the filter only a few crisp grains remain
+  a *= mix(1., 0.1, c);
+  size = uPSize * (0.7 + 0.6 * pow(r2, 6.)) * (1. + b * 0.45);
+  a /= (1. + b * 0.6);
+  vSoft = b * 0.35;
+  vC = inkCol(x, c);
+  vA = a * uParts;
+  gl_Position = vec4(x * 2. - 1., y * 2. - 1., 0., 1.);
+  gl_PointSize = size * uScale;
+}`;
+  const PFS = `
+precision mediump float;
+varying float vA; varying float vSoft; varying vec3 vC;
+void main(){
+  float d = length(gl_PointCoord - 0.5);
+  float crisp = 1. - smoothstep(0.3, 0.5, d);
+  float soft = 1. - smoothstep(0.0, 0.5, d);
+  gl_FragColor = vec4(vC * vA * mix(crisp, soft * soft, vSoft), 0.);
+}`;
+  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const link = (vs, fs) => { const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; };
+  const prog = link(VS, FS), pprog = link(PVS, PFS);
+  // Strands: many noisy, crossing lines that pull together into one clean string where filtered.
+  const FS2 = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uFrame, uScale;
+uniform float uFilter, uPc, uPw, uEdge, uShape;
+uniform float uCount, uSpread, uThick, uGlow, uHaze, uTwist, uCleanAmp, uSFreq, uSNoise, uCenter, uGrain, uVig, uLines, uRender, uGrit;
+uniform float uStages, uSpan, uPaneH, uPanes, uPulse, uPulseSpd;
+uniform vec3 uBg, uInk;
+uniform float uMode, uDrift; uniform vec3 uG0, uG1, uG2;
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+float fbm1(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 4; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; }
+float n2(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1., 0.)), u.x), mix(hash2(i + vec2(0., 1.)), hash2(i + vec2(1., 1.)), u.x), u.y); }
+vec3 grad3(float t){ t = clamp(t, 0., 1.); return t < 0.5 ? mix(uG0, uG1, t * 2.) : mix(uG1, uG2, (t - 0.5) * 2.); }
+vec3 inkCol(float x, float focus){
+  if (uMode < 0.5) return uInk;
+  vec3 g = grad3(x + 0.22 * sin(uTime * 0.12) * uDrift);
+  return uMode < 1.5 ? g : mix(uInk * 0.85, g, focus);
+}
+// Filter stages: glass panes the signal passes through, left to right, getting cleaner at each.
+float stageX(float k){ return uStages < 1.5 ? uPc : uPc - uSpan * 0.5 + uSpan * k / (uStages - 1.); }
+bool inOut(){ return abs(uStages - 2.) < 0.5; }
+// Line mode: a single vertical filter line; the strands converge onto it and leave as one clean line
+bool lineMode(){ return abs(uStages - 4.) < 0.5; }
+// entry and exit glass sit where the strands have fully become one line
+float glassX(float k){ float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5; return k < 0.5 ? l + uEdge * 0.85 : r - uEdge * 0.85; }
+float filt(float x){
+  if (lineMode()) return uFilter * smoothstep(uPc - uEdge * 1.6, uPc, x);
+  // In / Out: noisy right up to the entry glass, clean only between the two panes, noisy again after the exit glass
+  if (inOut()) { float g0 = glassX(0.), g1 = glassX(1.), k = uEdge * 0.35;
+    return uFilter * smoothstep(g0 - k, g0, x) * (1. - smoothstep(g1, g1 + k, x)); }
+  if (uStages > 0.5 && !inOut()) {
+    float c = 0.;
+    for (int k = 0; k < 3; k++) {
+      float fk = float(k);
+      if (fk >= uStages) break;
+      float px = stageX(fk);
+      c += smoothstep(px - uEdge * 0.22, px + uEdge * 0.22, x);
+    }
+    return uFilter * c / uStages;
+  }
+  if (uShape > 0.5) return uFilter * smoothstep(uPc - uEdge, uPc + uEdge, x);
+  float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5;
+  return uFilter * smoothstep(l - uEdge, l + uEdge, x) * (1. - smoothstep(r - uEdge, r + uEdge, x));
+}
+void main(){
+  vec2 frag = gl_FragCoord.xy, uv = frag / uRes;
+  float x = uv.x, y = uv.y, asp = uRes.x / uRes.y;
+  float c = filt(x), nz = 1. - c;
+  float t = uTime;
+  // the one clean string the strands resolve into
+  float clean = uCleanAmp * sin(x * asp * uSFreq * 2.4 + t * 0.5);
+  float I = 0.;
+  for (int i = 0; i < 14; i++) {
+    float fi = float(i);
+    if (fi >= uCount) break;
+    float ph = hash(fi * 1.7 + 0.3) * 6.2831853;
+    float fr = 0.65 + 0.7 * hash(fi + 3.1);
+    float amp = uSpread * (0.45 + 0.55 * hash(fi + 7.3));
+    float wob = sin(x * asp * uSFreq * 6.2831853 * fr * 0.5 + ph + t * (0.5 + 0.6 * hash(fi + 5.))) * amp;
+    wob += (fbm1(x * asp * 5. + fi * 13.7 + t * 0.35) - 0.5) * uSNoise * 0.22;
+    float yi = uCenter + clean + wob * (1. - c);
+    float w = mix(uThick * 3.2, uThick, c);
+    float d = y - yi;
+    // pulses travel left to right; in the clean line they fall into step and read as one
+    float pph = mix(hash(fi * 3.7) * 9., 0., c);
+    float pf = fract(x * asp * 0.45 - t * uPulseSpd + pph);
+    float pm = 1. + uPulse * 2.4 * exp(-pow(pf - 0.5, 2.) / 0.0012);
+    I += (exp(-d * d / (w * w)) * 0.7 + uGlow * exp(-abs(d) / (w * 7.)) * 0.22) * pm;
+  }
+  // Where filtered, every strand lands on exactly the same path, so they overlap perfectly into one line.
+  // Divide by how many are stacked there, so the merged line is as bright as a single strand.
+  I /= mix(1. + uCount * 0.08, uCount * 0.85, c);
+  I *= uLines;
+  // the glass panes
+  if (uStages > 0.5 && uPanes > 0.001) {
+    float hw = (inOut() ? 5. : 7.) * uScale / uRes.x;
+    float len = uPaneH * 1.4;
+    for (int k = 0; k < 3; k++) {
+      float fk = float(k);
+      if (fk >= (inOut() ? 2. : lineMode() ? 0. : uStages)) break;
+      float px = inOut() ? glassX(fk) : stageX(fk), dx = abs(x - px);
+      // brightest where the signal crosses, fading out toward the top and bottom
+      float yc = uCenter + uCleanAmp * sin(px * asp * uSFreq * 2.4 + t * 0.5);
+      float inY = 1. - smoothstep(len * 0.15, len, abs(y - yc));
+      float inside = (1. - smoothstep(hw * 0.7, hw, dx)) * inY;
+      float edge = exp(-abs(dx - hw) * uRes.x / (1.1 * uScale)) * inY;
+      I += uPanes * (inside * 0.05 + edge * 0.3);
+    }
+  }
+  // haze filling the space between noisy strands
+  float spread = uSpread * 1.1 + 0.02;
+  float hz = exp(-abs(y - uCenter - clean) / spread) * nz * uHaze * (0.45 + 0.55 * n2(vec2(x * asp * 5., y * 7. + t * 0.25)));
+  I += hz * 0.7;
+  float v = 1. - exp(-I * 1.6);
+  vec3 paper = uBg * (1. - uVig * 0.25 * smoothstep(0.35, 0.95, length((uv - 0.5) * vec2(1.1, 1.))));
+  vec3 col = paper + inkCol(x, c) * v;
+  if (lineMode() && uPanes > 0.001) {
+    float lx = abs(x - uPc) * uRes.x / uScale;
+    float yc = uCenter + uCleanAmp * sin(uPc * asp * uSFreq * 2.4 + t * 0.5);
+    // the line is brightest at the node and fades out before it reaches the top and bottom
+    float len = uPaneH * 1.4;
+    float fade = 1. - smoothstep(len * 0.15, len, abs(y - yc));
+    col += vec3(0.62) * uPanes * fade * (exp(-lx / 0.55) * 0.55 + exp(-lx / 6.) * 0.04);
+    float dpx = length(vec2((x - uPc) * uRes.x, (y - yc) * uRes.y)) / uScale;
+    col += vec3(0.5) * exp(-dpx / 9.) * 0.35 * uPanes;
+    col = mix(col, vec3(0.94), (1. - smoothstep(5.5, 7., dpx)) * uPanes);
+  }
+  col += (hash2(frag / uScale + fract(uFrame * 0.618) * 31.) - 0.5) * uGrain * 0.06;
+  gl_FragColor = vec4(clamp(col, 0., 1.), 1.);
+}`;
+  const prog2 = link(VS, FS2);
+  const U2 = Object.fromEntries(["uRes", "uTime", "uFrame", "uScale", "uFilter", "uPc", "uPw", "uEdge", "uShape", "uCount", "uSpread", "uThick", "uGlow", "uHaze", "uTwist", "uCleanAmp", "uSFreq", "uSNoise", "uCenter", "uGrain", "uVig", "uBg", "uInk", "uMode", "uDrift", "uG0", "uG1", "uG2", "uLines", "uStages", "uSpan", "uPaneH", "uPanes", "uPulse", "uPulseSpd"].map(n => [n, gl.getUniformLocation(prog2, n)]));
+  const aQ2 = gl.getAttribLocation(prog2, "a");
+  const PVS2 = FS2.slice(0, FS2.indexOf("void main(){")) + `
+attribute vec4 aP;
+uniform float uParts, uPSize, uRise;
+varying float vA; varying float vSoft; varying vec3 vC;
+void main(){
+  float r1 = aP.x, r2 = aP.y, r3 = aP.z, r4 = aP.w;
+  float x = r1, asp = uRes.x / uRes.y, t = uTime;
+  float p0 = stageX(0.);
+  bool flowP = (abs(uStages - 1.) < 0.5 || abs(uStages - 3.) < 0.5) && uRender < 0.5 && fract(r2 * 5.3) < 0.5;
+  float fl = 0.;
+  if (flowP) { fl = fract(r1 + t * 0.035 * (0.5 + r3)); x = mix(-0.02, p0 + 0.002, fl); }
+  float c = filt(x), nz = 1. - c;
+  float clean = uCleanAmp * sin(x * asp * uSFreq * 2.4 + t * 0.5);
+  // ride one of the strands, using exactly the same path as the strand itself
+  float fi = floor(r4 * uCount);
+  float ph = hash(fi * 1.7 + 0.3) * 6.2831853;
+  float fr = 0.65 + 0.7 * hash(fi + 3.1);
+  float amp = uSpread * (0.45 + 0.55 * hash(fi + 7.3));
+  float wob = sin(x * asp * uSFreq * 6.2831853 * fr * 0.5 + ph + t * (0.5 + 0.6 * hash(fi + 5.))) * amp;
+  wob += (fbm1(x * asp * 5. + fi * 13.7 + t * 0.35) - 0.5) * uSNoise * 0.22;
+  float yi = uCenter + clean + wob * nz;
+  if (uRender > 0.5) {
+    // Particles form the strands: a tight, crisp line where filtered, scattered fuzzy clouds where noisy.
+    float g2 = (hash(r1 * 7.3) + hash(r2 * 3.1) + hash(r3 * 5.9) + hash(r4 * 2.3) - 2.) * 1.0;
+    float o2;
+    float a2 = 1.;
+    if (fract(r3 * 7.) < 0.82) {
+      o2 = g2 * (0.0012 + nz * 0.022 * (0.4 + uSpread * 3.));
+      o2 += (hash(r1 * 91.7 + floor(uFrame * 0.5)) - 0.5) * 0.006 * nz * uGrit;
+      a2 = 0.6 + 0.4 * hash(r2 * 13.1 + floor(uFrame * 0.5) * nz);
+    } else {
+      float lf = fract(r2 + t * 0.04 * (0.4 + r3));
+      float sd = r3 < 0.5 ? -1. : 1.;
+      o2 = sd * (-log(1. - fract(r3 * 2.) * 0.985)) * (0.01 + 0.05 * uRise) * (0.1 + nz * 1.4) + sd * lf * 0.06 * uRise * nz;
+      a2 = (1. - lf) * exp(-abs(o2) * 10.) * 0.7;
+    }
+    x += (hash(r1 * 31.3 + floor(uFrame * 0.5)) - 0.5) * 0.002 * nz;
+    vSoft = 0.;
+    vC = inkCol(x, c);
+    vA = a2 * uParts * mix(0.5, 1.2, c);
+    gl_Position = vec4(x * 2. - 1., (yi + o2) * 2. - 1., 0., 1.);
+    gl_PointSize = uPSize * (0.8 + 0.5 * r2) * uScale;
+    return;
+  }
+  if (flowP) {
+    // noise drifting toward the filter, piling up and stopping at the first pane
+    float g3 = (hash(r1 * 7.3) + hash(r2 * 3.1) + hash(r3 * 5.9) - 1.5) * 1.15;
+    float o3 = g3 * (0.003 + 0.03 * nz);
+    float a3 = smoothstep(0., 0.08, fl) * (0.45 + 2.4 * exp(-max(p0 - x, 0.) * 160.));
+    vSoft = 0.3;
+    vC = inkCol(x, c);
+    vA = a3 * uParts * 0.5;
+    gl_Position = vec4(x * 2. - 1., (yi + o3) * 2. - 1., 0., 1.);
+    gl_PointSize = uPSize * (1. + 0.4 * r2) * uScale;
+    return;
+  }
+  // Soft, faint motes that add up into a glow, like Signal Particles.
+  // Some ride the strand itself; the rest drift off it as a fine haze. Inside the filter they settle onto the line.
+  float life = fract(r2 + t * 0.04 * (0.4 + r3));
+  float side = r3 < 0.5 ? -1. : 1.;
+  float g = (hash(r1 * 7.3) + hash(r2 * 3.1) + hash(r3 * 5.9) - 1.5) * 1.15;
+  float off, a;
+  if (fract(r3 * 7.) < 0.45) {
+    off = g * (0.0015 + nz * 0.008);
+    a = 0.9;
+  } else {
+    off = side * (-log(1. - fract(r3 * 2.) * 0.985)) * (0.006 + 0.04 * uRise) * (0.15 + nz * 1.4);
+    off += side * life * 0.06 * uRise * nz;
+    a = (1. - life) * (1. - life) * exp(-abs(off) * 12.);
+  }
+  x += (n1(r1 * 40. + t * 0.6) - 0.5) * 0.008 * nz;
+  a *= mix(1., 0.35, c);
+  vSoft = 1.;
+  vC = inkCol(x, c);
+  vA = a * uParts * 0.32;
+  gl_Position = vec4(x * 2. - 1., (yi + off) * 2. - 1., 0., 1.);
+  gl_PointSize = uPSize * (1.1 + 0.5 * r2) * uScale;
+}`;
+  const pprog2 = link(PVS2, PFS);
+  const PU2 = Object.fromEntries(["uRes", "uTime", "uFrame", "uScale", "uFilter", "uPc", "uPw", "uEdge", "uShape", "uCount", "uSpread", "uCleanAmp", "uSFreq", "uSNoise", "uCenter", "uInk", "uMode", "uDrift", "uG0", "uG1", "uG2", "uParts", "uPSize", "uRise", "uRender", "uGrit", "uStages", "uSpan"].map(n => [n, gl.getUniformLocation(pprog2, n)]));
+  const aP2 = gl.getAttribLocation(pprog2, "aP");
+  const names = ["uMode", "uDrift", "uG0", "uG1", "uG2", "uInk", "uRes", "uTime", "uFrame", "uScale", "uFilter", "uRegion", "uPc", "uPw", "uEdge", "uFreq", "uHarm", "uAmp", "uCrestY", "uNoise", "uGrit", "uSpikes", "uBlur"];
+  const U = Object.fromEntries([...names, "uBody", "uWeight", "uEdgeK", "uGrain", "uVig", "uBg", "uInk"].map(n => [n, gl.getUniformLocation(prog, n)]));
+  const PU = Object.fromEntries([...names, "uParts", "uPSize", "uRise", "uPC"].map(n => [n, gl.getUniformLocation(pprog, n)]));
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aQ = gl.getAttribLocation(prog, "a"), aP = gl.getAttribLocation(pprog, "aP");
+  const pbuf = gl.createBuffer();
+  let PN = 0;
+  function seedParticles() {
+    PN = Math.round((4000 + S.parts / 100 * 76000) * (S.style === "strands" && S.render === "particles" ? 2.2 : 1));
+    const d = new Float32Array(PN * 4); for (let i = 0; i < d.length; i++) d[i] = Math.random();
+    gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+  }
+  seedParticles();
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+  let BG = rgb(S.bg), INK = rgb(S.ink);
+  const MODES = { mono: 0, gradient: 1, filter: 2 };
+  const GRADS = {
+    iris:   ["#4a6cf7", "#a35cf0", "#f27ad6"],
+    dawn:   ["#1f5ae6", "#c262f0", "#ff9ac8"],
+    aurora: ["#33d1a6", "#7ed8ff", "#c7b4ff"],
+    ice:    ["#2f6bff", "#6fc8ff", "#e8f5ff"],
+    ember:  ["#ff4d36", "#ff9a45", "#ffdca6"],
+    acid:   ["#c8ff4d", "#52f2c2", "#5aa8ff"]
+  };
+  let G = [rgb(S.g0), rgb(S.g1), rgb(S.g2)];
+  function setColor(L) {
+    gl.uniform1f(L.uMode, MODES[S.cmode] ?? 0); gl.uniform1f(L.uDrift, S.drift / 100);
+    gl.uniform3fv(L.uG0, G[0]); gl.uniform3fv(L.uG1, G[1]); gl.uniform3fv(L.uG2, G[2]);
+  }
+  const STAGE_NAMES = { 1: ["Filter"], 3: ["Privacy", "Integrity", "Security"] };
+  function placeStages() {
+    const box = document.getElementById("stages");
+    const n = +S.stages;
+    if (!n || n === 2 || n === 4 || S.stgLabels !== "on") { box.innerHTML = ""; return; }
+    const span = 0.05 + S.span / 100 * 0.6, center = 0.3 + S.height / 100 * 0.45, paneH = 0.04 + S.paneH / 100 * 0.4;
+    const xs = n === 1 ? [px] : [0, 1, 2].map(k => px - span / 2 + span * k / 2);
+    const names = STAGE_NAMES[n];
+    const yTop = (1 - (center + paneH)) * 100, yMid = (1 - center) * 100;
+    box.innerHTML = names.map((nm, k) => `<span style="left:${(xs[k] * 100).toFixed(2)}%;top:${yTop.toFixed(2)}%"><b>${String(k + 1).padStart(2, "0")}</b>${nm}</span>`).join("")
+      + `<span class="end" style="left:2%;top:calc(${yMid.toFixed(2)}% - 3.2em)">${S.lblIn}</span><span class="end r" style="left:98%;top:calc(${yMid.toFixed(2)}% - 3.2em)">${S.lblOut}</span>`;
+  }
+  const applyType = () => {
+    placeStages();
+    hero.dataset.type = S.typeMode;
+    document.getElementById("lk1").textContent = S.lk1; document.getElementById("lk2").textContent = S.lk2; document.getElementById("lk3").textContent = S.lk3; document.getElementById("lk4").textContent = S.lk4;
+    document.getElementById("lockup").style.setProperty("--ly", (15 + S.lky * 0.7) + "%");
+    document.getElementById("lockup").style.setProperty("--lgap", (S.lgap / 100 * 2).toFixed(3) + "em");
+    document.getElementById("lockup").style.setProperty("--lsgap", (S.lsgap / 100 * 3).toFixed(3) + "em");
+    document.getElementById("lockup").style.setProperty("--lsz", (0.55 + S.lsz / 100 * 0.9).toFixed(3));
+    document.getElementById("lockup").style.setProperty("--lfs", (0.6 + S.lfs / 100 * 1.0).toFixed(3));
+    hero.style.setProperty("--hfs", (0.6 + S.hfs / 100 * 1.0).toFixed(3));
+    document.getElementById("lockup").style.setProperty("--lsw", (12 + S.lsw / 100 * 44).toFixed(1) + "em");
+  };
+  const applyColors = () => { applyType(); G = [rgb(S.g0), rgb(S.g1), rgb(S.g2)]; BG = rgb(S.bg); INK = rgb(S.ink); document.documentElement.style.setProperty("--ground", S.bg); };
+  applyColors();
+
+  // The filter follows the pointer; when the pointer is still, it sweeps on its own.
+  hero.addEventListener("pointermove", e => {
+    const r = hero.getBoundingClientRect();
+    if (S.pointer !== "on") return;
+    target = (e.clientX - r.left) / r.width; lastMove = simT;
+    if (REDUCED) { px = target; draw(); }
+  });
+
+  function draw() {
+    const W = cv.width, H = cv.height, scale = dpr;
+    gl.viewport(0, 0, W, H);
+    const shared = {
+      uRes: [W, H], uTime: simT, uFrame: frameNo, uScale: scale, uFilter: S.filter / 100, uRegion: 1, uPc: px, uPw: 0.08 + S.pwidth / 100 * 0.6,
+      uEdge: 0.01 + S.edge / 100 * 0.16, uFreq: 0.4 + S.freq / 100 * 5, uHarm: S.harm / 100, uAmp: 0.2 + S.amp / 100 * 1.4,
+      uCrestY: 0.3 + S.height / 100 * 0.45, uNoise: S.noise / 100 * 1.4, uGrit: S.grit / 100, uSpikes: S.spikes / 100, uBlur: S.blur / 100
+    };
+    const set = (L, vals) => { for (const [k, v] of Object.entries(vals)) if (L[k]) Array.isArray(v) ? gl.uniform2f(L[k], v[0], v[1]) : gl.uniform1f(L[k], v); };
+    if (S.style === "strands") {
+      gl.disable(gl.BLEND);
+      gl.useProgram(prog2);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(aQ2); gl.vertexAttribPointer(aQ2, 2, gl.FLOAT, false, 0, 0);
+      const edgeV = 0.01 + S.edge / 100 * 0.25;
+      const pwV = S.stages === "2" ? (0.05 + S.ggap / 100 * 0.8) + 1.7 * edgeV : 0.08 + S.pwidth / 100 * 0.6;
+      const SV = { uRes: [W, H], uTime: simT, uFrame: frameNo, uScale: scale, uFilter: S.filter / 100, uPc: px, uPw: pwV,
+        uEdge: 0.01 + S.edge / 100 * 0.25, uShape: S.sshape === "edge" ? 1 : 0, uCount: Math.round(2 + S.scount / 100 * 12),
+        uSpread: 0.02 + S.spread / 100 * 0.22, uThick: (0.6 + S.sthick / 100 * 3) * scale / H, uGlow: S.glow / 100, uHaze: S.haze / 100,
+        uTwist: S.twist / 100, uCleanAmp: S.camp / 100 * 0.12, uSFreq: 0.3 + S.sfreq / 100 * 3, uSNoise: S.snoise / 100, uCenter: 0.3 + S.height / 100 * 0.45,
+        uGrain: S.grain / 100, uVig: S.vignette / 100, uLines: S.render === "particles" ? 0 : 1,
+        uRender: S.render === "particles" ? 1 : 0, uGrit: S.grit / 100,
+        uStages: +S.stages, uSpan: 0.05 + S.span / 100 * 0.6, uPaneH: 0.04 + S.paneH / 100 * 0.4, uPanes: S.panes / 100,
+        uPulse: S.pulse / 100, uPulseSpd: 0.05 + S.pulseSpd / 100 * 0.6 };
+      set(U2, SV);
+      gl.uniform3fv(U2.uBg, BG); gl.uniform3fv(U2.uInk, INK); setColor(U2);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.disableVertexAttribArray(aQ2);
+      if ((S.parts > 0 || S.render === "particles") && PN) {
+        gl.useProgram(pprog2);
+        gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.enableVertexAttribArray(aP2); gl.vertexAttribPointer(aP2, 4, gl.FLOAT, false, 0, 0);
+        set(PU2, SV);
+        set(PU2, S.render === "particles"
+          ? { uParts: 0.25 + S.pdark / 100 * 0.75, uPSize: 0.8 + S.psize / 100 * 3, uRise: S.rise / 100 }
+          : { uParts: 0.35 + S.pdark / 100 * 0.6, uPSize: 0.9 + S.psize / 100 * 4, uRise: S.rise / 100 });
+        gl.uniform3fv(PU2.uInk, INK); setColor(PU2);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+        gl.drawArrays(gl.POINTS, 0, PN);
+        gl.disable(gl.BLEND);
+        gl.disableVertexAttribArray(aP2);
+      }
+      return;
+    }
+    gl.disable(gl.BLEND);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(aQ); gl.vertexAttribPointer(aQ, 2, gl.FLOAT, false, 0, 0);
+    set(U, shared);
+    set(U, { uBody: 0.03 + S.body / 100 * 0.45, uWeight: 0.3 + S.weight / 100 * 1.2, uEdgeK: S.edgek / 100, uGrain: S.grain / 100, uVig: S.vignette / 100 });
+    gl.uniform3fv(U.uBg, BG); gl.uniform3fv(U.uInk, INK); setColor(U);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disableVertexAttribArray(aQ);
+    gl.useProgram(pprog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 4, gl.FLOAT, false, 0, 0);
+    set(PU, shared);
+    set(PU, { uParts: 0.35 + S.pdark / 100 * 0.6, uPSize: 0.9 + S.psize / 100 * 4, uRise: S.rise / 100 });
+    gl.uniform3fv(PU.uInk, INK); setColor(PU);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.drawArrays(gl.POINTS, 0, PN);
+    gl.disable(gl.BLEND);
+    gl.disableVertexAttribArray(aP);
+  }
+
+  let dpr = 1;
+  function resize() {
+    const r = hero.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 1.6, 2400 / Math.max(r.width, 1));
+    cv.width = Math.max(2, Math.round(r.width * dpr)); cv.height = Math.max(2, Math.round(r.height * dpr));
+    draw();
+  }
+  new ResizeObserver(resize).observe(hero);
+
+  let simT = 3, frameNo = 1, frameAcc = 0, last = performance.now(), visible = true;
+  new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(hero);
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (visible && !REDUCED && !document.hidden) {
+      const sp = 0.15 + S.speed / 100 * 1.8;
+      simT += dt * sp; frameAcc += dt * 24;
+      if (frameAcc >= 1) { frameNo += Math.floor(frameAcc); frameAcc %= 1; }
+      const idle = S.pointer !== "on" || simT - lastMove > 2.5;
+      const sweepGoal = S.style === "strands" && S.sshape === "edge" ? 0.52 + 0.12 * Math.sin(simT * 0.3) : 0.5 + 0.3 * Math.sin(simT * 0.35);
+      const goal = !idle ? target : S.sweep === "auto" ? sweepGoal : S.hold / 100;
+      const pxBefore = px;
+      px += (goal - px) * (1 - Math.exp(-dt * (idle ? 1.5 : 6)));
+      if (+S.stages && Math.abs(px - pxBefore) > 1e-4) placeStages();
+      draw();
+    }
+    requestAnimationFrame(tick);
+  }
+  // ---------- tuning panel ----------
+  const GROUPS = [
+    ["Filter", [["filter", "Filter", "How clean the signal gets under the filter."], ["pwidth", "Width", "Width of the filtered area (Pane shape)."], ["edge", "Falloff", "How gradually the signal resolves at the filter's edge."]]],
+    ["Strands", [["scount", "Strands", "How many lines make up the noisy signal."], ["spread", "Spread", "How far apart the noisy strands swing."], ["snoise", "Wobble", "Irregular wobble in the noisy strands."], ["sfreq", "Frequency", "How many waves run across."], ["sthick", "Thickness", "Thickness of the strands."], ["glow", "Glow", "Soft light around each strand."], ["haze", "Haze", "Smoky light between the noisy strands."], ["camp", "Clean wave", "How much the single clean string still waves."]]],
+    ["Signal", [["freq", "Frequency", "How many waves run across."], ["harm", "Harmonics", "Overtones that sharpen the clean wave."], ["amp", "Amplitude", "Height of the wave."], ["height", "Position", "Where the wave sits vertically."], ["noise", "Noise", "How jagged the unfiltered signal is."], ["grit", "Grit", "Fine, fast jitter in the noise."], ["spikes", "Spikes", "Sudden sharp peaks in the noise."]]],
+    ["Ink", [["weight", "Weight", "Brightness of the wave."], ["body", "Body", "How far light bleeds down from the wave."], ["edgek", "Edge", "How crisp the noisy wave's edge is."], ["blur", "Blur", "How out of focus the noise is."]]],
+    ["Particles", [["parts", "Amount", "How many particles."], ["psize", "Size", "Size of each particle."], ["pdark", "Brightness", "How bright each particle is."], ["rise", "Rise", "How far they drift up off the wave."]]],
+    ["Texture & motion", [["grain", "Grain", "Film grain."], ["vignette", "Shade", "Darkening toward the edges."], ["speed", "Speed", "How fast everything moves."]]]
+  ];
+  const panel = document.getElementById("tune"), btn = document.getElementById("tuneBtn");
+  const inputs = {};
+  let html = `<h3>Filter concept</h3>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Off: no glass. 1 or 3: the signal passes through glass filter panes, getting cleaner at each. In / Out: two glass panes, where noise enters and the clean line comes out in the middle. Line: one filter line that follows the cursor.">Stages</label><span class="seg" data-key="stages"><button type="button" data-v="0">Off</button><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="2">In / Out</button><button type="button" data-v="4">Line</button></span></div>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Labels on the panes and at both ends.">Labels</label><span class="seg" data-key="stgLabels"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></span></div>
+    <div class="r"><label for="t-span" title="Distance between the first and last pane.">Pane spacing</label><input type="range" id="t-span" min="0" max="100" data-k="span"><output></output></div>
+    <div class="r"><label for="t-ggap" title="In / Out: distance between the two glass panes. The strands always become one line exactly at the glass.">Glass spacing</label><input type="range" id="t-ggap" min="0" max="100" data-k="ggap"><output></output></div>
+    <div class="r"><label for="t-gpos" title="Slide the whole filter, glass included, left or right.">Glass position</label><input type="range" id="t-gpos" min="0" max="100" data-k="hold"><output></output></div>
+    <div class="r"><label for="t-paneH" title="Height of the glass panes. In Line mode: how far the filter line reaches before fading out.">Pane height</label><input type="range" id="t-paneH" min="0" max="100" data-k="paneH"><output></output></div>
+    <div class="r"><label for="t-panes" title="How visible the glass panes are. 0 hides them but keeps the stages.">Pane glass</label><input type="range" id="t-panes" min="0" max="100" data-k="panes"><output></output></div>
+    <div class="r"><label for="t-pulse" title="Bright pulses flowing left to right along the strands.">Pulses</label><input type="range" id="t-pulse" min="0" max="100" data-k="pulse"><output></output></div>
+    <div class="r"><label for="t-pulseSpd" title="How fast the pulses travel.">Pulse speed</label><input type="range" id="t-pulseSpd" min="0" max="100" data-k="pulseSpd"><output></output></div>
+    <div class="tr"><input type="text" data-t="lblIn" aria-label="Left label" maxlength="30"></div>
+    <div class="tr"><input type="text" data-t="lblOut" aria-label="Right label" maxlength="30"></div>
+    <h3>Style</h3>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Strands: many noisy lines resolve into one string. Ink: a blurred wave that comes into focus.">Look</label><span class="seg" data-key="style"><button type="button" data-v="strands">Strands</button><button type="button" data-v="ink">Ink</button></span></div>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Lines: glowing lines. Particles: the strands are built from fine particles.">Render</label><span class="seg" data-key="render"><button type="button" data-v="particles">Particles</button><button type="button" data-v="lines">Lines</button></span></div>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Edge: noisy on the left, clean from the filter onward. Pane: clean only inside a band that follows the cursor.">Filter shape</label><span class="seg" data-key="sshape"><button type="button" data-v="edge">Edge</button><button type="button" data-v="pane">Pane</button></span></div>
+    <h3>Filter movement</h3>
+    <div class="r"><label title="The filter follows the cursor.">Follow cursor</label><span class="seg" data-key="pointer"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></span><span></span></div>
+    <div class="r"><label title="When idle: sweep across, or hold still at a set position.">When idle</label><span class="seg" data-key="sweep"><button type="button" data-v="auto">Sweep</button><button type="button" data-v="hold">Hold</button></span><span></span></div>
+    <div class="r"><label for="t-hold" title="Where the filter rests when holding.">Hold at</label><input type="range" id="t-hold" min="0" max="100" data-k="hold"><output></output></div>`;
+  for (const [g, rows] of GROUPS) {
+    html += `<h3>${g}</h3>`;
+    for (const [k, name, tip] of rows) html += `<div class="r"><label for="t-${k}" title="${tip}">${name}</label><input type="range" id="t-${k}" min="0" max="100" data-k="${k}"><output></output></div>`;
+  }
+  html += `<h3>Type</h3>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Lockup: the wide Gray lockup centered over the animation. Headline: the design's headline bottom left. Both: show both.">Show</label><span class="seg" data-key="typeMode"><button type="button" data-v="lockup">Lockup</button><button type="button" data-v="headline">Headline</button><button type="button" data-v="both">Both</button></span></div>
+    <div class="r"><label for="t-hfs" title="Size of the design headline, used in the Headline and Both layouts.">Headline size</label><input type="range" id="t-hfs" min="0" max="100" data-k="hfs"><output></output></div>
+    <div class="r"><label for="t-lky" title="Vertical position of the lockup.">Lockup height</label><input type="range" id="t-lky" min="0" max="100" data-k="lky"><output></output></div>
+    <div class="r"><label for="t-lfs" title="Size of the lockup's two heading lines.">Heading size</label><input type="range" id="t-lfs" min="0" max="100" data-k="lfs"><output></output></div>
+    <div class="r"><label for="t-lgap" title="Space between the lockup's two lines.">Line gap</label><input type="range" id="t-lgap" min="0" max="100" data-k="lgap"><output></output></div>
+    <div class="tr"><input type="text" data-t="lk1" aria-label="Lockup first line" maxlength="40"></div>
+    <div class="tr"><input type="text" data-t="lk2" aria-label="Lockup second line" maxlength="70"></div>
+    <div class="tr"><input type="text" data-t="lk3" aria-label="Lockup year" maxlength="12"></div>
+    <div class="r" style="margin-top:8px"><label for="t-lsgap" title="Space between the lockup and the subtitle.">Subtitle gap</label><input type="range" id="t-lsgap" min="0" max="100" data-k="lsgap"><output></output></div>
+    <div class="r"><label for="t-lsz" title="Size of the subtitle.">Subtitle size</label><input type="range" id="t-lsz" min="0" max="100" data-k="lsz"><output></output></div>
+    <div class="r"><label for="t-lsw" title="How wide the subtitle can run before it wraps to a new line.">Subtitle width</label><input type="range" id="t-lsw" min="0" max="100" data-k="lsw"><output></output></div>
+    <div class="tr"><input type="text" data-t="lk4" aria-label="Subtitle (leave empty to hide)" placeholder="Subtitle (empty hides it)" maxlength="140"></div>`;
+  html += `<h3>Color</h3>
+    <div class="r" style="grid-template-columns:92px 1fr"><label title="Mono keeps the current look. Gradient colors the whole signal. Filter only colors just the clean, filtered part.">Mode</label><span class="seg" data-key="cmode"><button type="button" data-v="mono">Mono</button><button type="button" data-v="gradient">Gradient</button><button type="button" data-v="filter">Filter only</button></span></div>
+    <div class="grads" id="grads"></div>
+    <div class="r"><label>Stops</label><span style="display:flex;gap:6px"><input type="color" id="t-g0" data-c="g0" aria-label="Gradient start"><input type="color" id="t-g1" data-c="g1" aria-label="Gradient middle"><input type="color" id="t-g2" data-c="g2" aria-label="Gradient end"></span><span></span></div>
+    <div class="r"><label for="t-drift" title="How much the gradient slowly drifts across.">Drift</label><input type="range" id="t-drift" min="0" max="100" data-k="drift"><output></output></div>
+    <div class="r"><label for="t-bg">Ground</label><input type="color" id="t-bg" data-c="bg"><span></span></div>
+    <div class="r"><label for="t-ink" title="Color of the mono ink, and of the noise in Filter only mode.">Mono light</label><input type="color" id="t-ink" data-c="ink"><span></span></div>
+    <div class="acts"><button type="button" id="tCopy">Copy</button><button type="button" id="tLoad">Load</button><button type="button" id="tReset">Reset</button></div>
+    <textarea id="tBox" hidden aria-label="Settings text"></textarea>
+    <p class="note" id="tNote" aria-live="polite">Changes are kept in this browser. Copy them to share or to make them the default.</p>`;
+  panel.innerHTML = html;
+  for (const [id, st] of Object.entries(GRADS)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.g = id; b.title = id[0].toUpperCase() + id.slice(1);
+    b.setAttribute("aria-label", b.title + " gradient");
+    b.style.background = `linear-gradient(90deg, ${st.join(", ")})`;
+    b.onclick = () => { S.gpal = id; [S.g0, S.g1, S.g2] = st; if (S.cmode === "mono") S.cmode = "gradient"; applyColors(); syncPanel(); save(); };
+    document.getElementById("grads").appendChild(b);
+  }
+  const note = m => { document.getElementById("tNote").textContent = m; };
+  function syncPanel() {
+    panel.querySelectorAll("input[type=range]").forEach(i => { i.value = S[i.dataset.k]; i.nextElementSibling.textContent = S[i.dataset.k]; });
+    panel.querySelectorAll("input[type=color]").forEach(i => { i.value = S[i.dataset.c]; });
+    panel.querySelectorAll("input[type=text]").forEach(i => { i.value = S[i.dataset.t]; });
+    panel.querySelectorAll("#grads button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.g === S.gpal)));
+    panel.querySelectorAll(".seg").forEach(sg => sg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(S[sg.dataset.key] === b.dataset.v))));
+  }
+  let seedT;
+  panel.addEventListener("input", e => {
+    const i = e.target;
+    if (i.dataset.k) {
+      S[i.dataset.k] = +i.value; i.nextElementSibling.textContent = i.value;
+      if (i.dataset.k === "parts") { clearTimeout(seedT); seedT = setTimeout(seedParticles, 120); }
+      if (i.dataset.k === "hold") { if (i.id === "t-gpos") { S.sweep = "hold"; S.pointer = "off"; syncPanel(); } lastMove = -10; }
+      if (["lky", "lgap", "lsgap", "lsz", "lfs", "lsw", "hfs", "span", "paneH", "height"].includes(i.dataset.k)) applyType();
+    } else if (i.dataset.t) { S[i.dataset.t] = i.value; applyType(); save(); return;
+    } else if (i.dataset.c) { S[i.dataset.c] = i.value; if (/^g\d$/.test(i.dataset.c)) S.gpal = "custom"; applyColors(); syncPanel(); }
+    save(); if (REDUCED) draw();
+  });
+  panel.addEventListener("click", e => {
+    const b = e.target.closest(".seg button");
+    if (b) { S[b.parentNode.dataset.key] = b.dataset.v; applyType(); if (b.parentNode.dataset.key === "render" || b.parentNode.dataset.key === "style") seedParticles(); syncPanel(); save(); }
+  });
+  document.getElementById("tCopy").onclick = () => {
+    const code = JSON.stringify(S), box = document.getElementById("tBox");
+    box.hidden = false; box.value = code; box.readOnly = true;
+    const fallback = () => { box.focus(); box.select(); note("Select all and copy the text above."); };
+    try { navigator.clipboard.writeText(code).then(() => note("Copied. Paste it to Claude to make this the default."), fallback); } catch (e) { fallback(); }
+  };
+  document.getElementById("tLoad").onclick = () => {
+    const box = document.getElementById("tBox");
+    if (box.hidden || box.readOnly) { box.hidden = false; box.readOnly = false; box.value = ""; box.placeholder = "Paste settings, then press Load again"; box.focus(); return; }
+    try { S = Object.assign({}, DEFAULTS, JSON.parse(box.value)); seedParticles(); applyColors(); syncPanel(); save(); box.hidden = true; note("Settings loaded."); }
+    catch (e) { note("Those settings couldn't be read. Paste the full text from Copy."); }
+  };
+  document.getElementById("tReset").onclick = () => { S = Object.assign({}, DEFAULTS); seedParticles(); applyColors(); syncPanel(); save(); note("Back to the defaults."); };
+  const setOpen = open => {
+    panel.hidden = !open; btn.setAttribute("aria-expanded", String(open));
+    try { localStorage.setItem(KEY + "-open", open ? "1" : "0"); } catch (e) {}
+  };
+  btn.onclick = () => setOpen(panel.hidden);
+  document.addEventListener("keydown", e => {
+    if (e.target.closest && e.target.closest("input, textarea")) return;
+    if (e.key === "t" || e.key === "T") setOpen(panel.hidden);
+    if (e.key === "Escape" && !panel.hidden) setOpen(false);
+  });
+  syncPanel();
+  let startOpen = true;
+  try { startOpen = localStorage.getItem(KEY + "-open") !== "0"; } catch (e) {}
+  setOpen(startOpen);
+
+  resize();
+  requestAnimationFrame(tick);
+})();
+</script>
