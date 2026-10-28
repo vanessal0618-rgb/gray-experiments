@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gray v8 - Opal Waves</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, paper stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 27px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 18px; }
+.swc { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .04em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #ecebe8; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #e6e6e6; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+.app.controls-closed{grid-template-columns:minmax(0,1fr)}.controls-closed .panel{display:none}
+.control-toggle{position:fixed;right:28px;top:28px;z-index:500;border:1px solid #555;border-radius:99px;background:#111;color:#eee;padding:10px 14px;font:12px var(--mono);cursor:pointer}
+@media(max-width:760px){.app.controls-closed .stage{height:calc(100svh - 32px)}}
+.app.controls-closed{padding:0;top:0;bottom:0}.controls-closed .stage{border-radius:0}
+@media(max-width:760px){.app.controls-closed{position:fixed}.app.controls-closed .stage{height:100svh}}
+:root[data-theme=light]{--panel:#fafaf8;--panel-fg:#171717;--panel-muted:#68686b;--panel-line:#d7d7d5;--track:#aaa}
+.panel .txt{background:var(--panel-line)}.panel .btn:hover,.panel .seg button:hover{background:var(--panel-line)}
+.control-toggle{background:var(--panel);color:var(--panel-fg);border-color:var(--panel-line)}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <aside class="panel" aria-label="Signal ink controls">
+    <div class="ph"><b>OPAL WAVES</b><span id="modeName">Sweeping</span></div>
+
+    <div class="sec" id="filterCtl">
+      <span class="sub">Filter = focus</span>
+      <div class="row"><span class="lbl">Region</span>
+        <div class="seg" role="group" aria-label="Filter region">
+          <button type="button" data-region="full">Full</button>
+          <button type="button" data-region="pane">Pane</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter, and its focus, glides across the signal.">Sweep</span>
+        <div class="seg" role="group" aria-label="Sweep">
+          <button type="button" data-sweep="off">Off</button>
+          <button type="button" data-sweep="on">On</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter rises and falls, so the signal drifts in and out of focus.">Breathe</span>
+        <div class="seg" role="group" aria-label="Breathe">
+          <button type="button" data-breathe="off">Off</button>
+          <button type="button" data-breathe="on">On</button>
+        </div>
+      </div>
+      <p class="hint">Drag on the image to move the filter.</p>
+    </div>
+
+    <div class="sec"><label class="row lbl" for="debugWave"><span>Debug wave</span><input type="checkbox" id="debugWave"></label></div>
+    <div class="sec" id="signalCtl"><span class="sub">Signal</span></div>
+    <div class="sec" id="inkCtl"><span class="sub">Ink</span></div>
+    <div class="sec" id="paperCtl"><span class="sub">Paper &amp; motion</span></div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="3:4">3:4</button>
+          <button type="button" data-ar="4:5">4:5</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="16:9">16:9</button>
+          <button type="button" data-ar="viewport">Viewport</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record video</button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="play" type="button">Pause</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="btns">
+        <button class="btn quiet" id="copySet" type="button">Copy settings</button>
+        <button class="btn quiet" id="loadSet" type="button">Load settings</button>
+      </div>
+      <textarea class="txt" id="setBox" rows="4" hidden aria-label="Settings code" style="height:auto;padding:8px 10px;font-size:10px;line-height:1.4;resize:vertical"></textarea>
+      <button class="btn" id="applySet" type="button" hidden>Apply pasted settings</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="out" aria-label="Opal waves: luminous pearl cores, lavender and rose halos, and fine photographic grain"></canvas>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = id => document.getElementById(id);
+
+  const PALETTES = {
+    paper: { name: "Paper",    bg: "#ecebe8", ink: "#0a0a0a" },
+    warm:  { name: "Warm",     bg: "#efe9df", ink: "#1c130b" },
+    blue:  { name: "Blue ink", bg: "#eceef2", ink: "#121f52" },
+    grey:  { name: "Gray",     bg: "#d9d9d6", ink: "#0d0d0d" },
+    night: { name: "Night",    bg: "#0b0b0b", ink: "#ecebe6" },
+    ice:   { name: "Ice",      bg: "#04060b", ink: "#c3dbf7" }
+  };
+  function defaults() {
+    return {
+      leftHaloBrightness: 50, leftGlow: 50, rightGlow: 50, rightHaloUniformity: 0, rightWaves: 100, foldRise: 50, foldFlow: 50, foldSpread: 50, foldSteep: 50, filmGrain: 65, waveCount: 4, irregularity: 50, smoothness: 35, rippleSpeed: 6, debugWave: false, region: "pane", sweep: "on", breathe: "on", px: 0.5,
+      filter: 100, pwidth: 30, edge: 60,
+      freq: 22, harm: 40, amp: 60, height: 55, noise: 65, grit: 30, spikes: 35,
+      body: 55, weight: 70, edgek: 55, spray: 25, dot: 45, stipple: 40, blur: 70,
+      grain: 30, vignette: 40, speed: 30,
+      paletteRevision: 1, palette: "paper", bg: PALETTES.paper.bg, ink: PALETTES.paper.ink,
+      labels: "off", l1: "IN THE REQUEST YOU SEND", l2: "WHAT LEAVES",
+      ar: "viewport"
+    };
+  }
+  const KEY = "gray-opal-waves-v8";
+  let S = defaults();
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (s) {
+      if (s.paletteRevision !== 1) {
+        Object.assign(s, { paletteRevision: 1, palette: "paper", bg: PALETTES.paper.bg, ink: PALETTES.paper.ink });
+        localStorage.setItem(KEY, JSON.stringify(s));
+      }
+      S = Object.assign(defaults(), s);
+    }
+  } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  let dirty = true;
+  const changed = () => { persist(); dirty = true; };
+  $("debugWave").onchange = e => { S.debugWave = e.target.checked; changed(); };
+
+  const SLIDERS = [
+    ["rightWaves", "Right wave separation", "0 merges the right side into one straight line; 100 restores the distinct waves. The left side stays unchanged.", "signalCtl"],
+    ["foldRise", "Rise", "Vertical rise and relaxation of the folds.", "signalCtl"],
+    ["foldFlow", "Flow", "Amount of phase flow through the folds.", "signalCtl"],
+    ["leftGlow", "Left halo", "Glow intensity on the left: 0 keeps only the bright core; 50 is the original glow; 100 doubles it.", "inkCtl"],
+    ["leftHaloBrightness", "Left halo brightness", "Brightness of the left halo: 0 is dark, 50 is the current brightness, and 100 doubles it. Keeps the bright core and halo shape unchanged.", "inkCtl"],
+    ["rightGlow", "Right halo", "Glow intensity on the right, independent of the left. The two sides blend smoothly at the center.", "inkCtl"],
+    ["rightHaloUniformity", "Right halo uniformity", "0 preserves the current most uneven halo; 100 makes the right halo width and intensity uniform along each wave.", "inkCtl"],
+    ["foldSpread", "Light width", "Width of each luminous wave and its surrounding haze.", "inkCtl"],
+    ["foldSteep", "Light steepness", "Steepness of the light falloff.", "inkCtl"],
+    ["filmGrain", "Film grain", "Photographic grain across the shadows and luminous bands.", "inkCtl"],
+    ["waveCount", "Wave count", "Number of interweaving waves (1-8).", "signalCtl"],
+    ["irregularity", "Irregularity", "0 gives regular sine waves; higher values add asymmetric envelopes and evolving distortion.", "signalCtl"],
+    ["rippleSpeed", "Ripple speed", "Speed of crests passing through a stationary wave packet. The packet itself stays in place.", "signalCtl"],
+    ["smoothness", "Smoothness", "Smooth the wave contours independently of irregularity. Higher values soften small bends.", "signalCtl"],
+    ["filter", "Filter", "How clear and in focus the signal gets inside the filter.", "filterCtl"],
+    ["pwidth", "Width", "Width of the filtered, in-focus region.", "filterCtl"],
+    ["edge", "Falloff", "How gradually focus fades at the filter's edges.", "filterCtl"],
+    ["freq", "Frequency", "How many waves run across the frame.", "signalCtl"],
+    ["harm", "Harmonics", "Overtones that sharpen the clean wave's peaks.", "signalCtl"],
+    ["amp", "Amplitude", "Height of the wave.", "signalCtl"],
+    ["height", "Height", "Where the wave sits in the frame.", "signalCtl"],
+    ["body", "Body", "How far the ink bleeds down below the wave.", "inkCtl"],
+    ["weight", "Weight", "How dark the ink is.", "inkCtl"],
+    ["blur", "Blur", "How soft and out of focus the unfiltered signal is.", "inkCtl"],
+    ["vignette", "Shade", "Soft shading toward the corners of the paper.", "paperCtl"],
+    ["speed", "Speed", "How fast everything moves.", "paperCtl"]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="${k === 'waveCount' ? 1 : 0}" max="${k === 'rippleSpeed' ? 20 : k === 'waveCount' ? 8 : k === 'body' ? 200 : 100}" step="${k === 'rippleSpeed' ? .1 : 1}"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent);
+    host.insertBefore(w, parent === "filterCtl" ? host.querySelector(".row") : null);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncSlider(k); changed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k], v = S[k];
+    input.value = v; bub.textContent = k === 'rippleSpeed' ? v + 'x' : v;
+    bub.style.left = `calc(${(v - Number(input.min)) / (Number(input.max) - Number(input.min))} * (100% - 24px))`;
+  }
+  for (const key of ["region", "sweep", "breathe", "ar"])
+    document.querySelectorAll(`[data-${key}]`).forEach(b => b.onclick = () => {
+      S[key] = b.dataset[key];
+      if (key === "sweep" && S.sweep === "on") S.region = "pane";
+      syncUI(); if (key === "ar") layout(); changed();
+    });
+
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = defaults(); applyTheme(currentTheme); syncUI(); layout(); changed(); status("Reset to defaults"); };
+
+  function syncUI() {
+    $("debugWave").checked = !!S.debugWave;
+    for (const k in sliderEls) syncSlider(k);
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    for (const k of ["region", "sweep", "breathe", "ar"]) press(k, S[k]);
+    $("modeName").textContent = S.region === "full" ? "In focus" : S.sweep === "on" ? "Sweeping" : "Filtering";
+    $("play").textContent = playing ? "Pause" : "Play";
+    $("stage").style.background = S.bg;
+  }
+
+  // ---------- WebGL ----------
+  const glc = document.createElement("canvas");
+  const gl = glc.getContext("webgl", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+  const out = $("out"), octx = out.getContext("2d");
+  if (!gl) { $("stage").innerHTML = '<div class="err">This tool needs WebGL, which isn\'t available in this browser. Try a recent Chrome, Safari or Firefox with hardware acceleration on.</div>'; return; }
+  const VS = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uFrame, uScale;
+uniform float uFilter, uRegion, uPc, uPw, uEdge;
+uniform float uFreq, uHarm, uAmp, uCrestY, uNoise, uGrit, uSpikes;
+uniform float uBody, uWeight, uEdgeK, uSpray, uDot, uStipple, uBlur, uGrain, uVig;
+uniform float uLeftGlow,uRightGlow,uRightHaloUniformity,uLeftHaloBrightness;
+uniform float uSpread,uFlow,uFoldSteep,uFilmGrain; uniform vec3 uBg, uInk; uniform float uDebug; uniform float uWaveCount; uniform sampler2D uWaveShape; uniform float uWaveSamples;
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+float fbm1(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 5; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; }
+float fbmLo(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 2; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s / 0.75 * 0.9375; }
+
+float filt(float x){
+  if (uRegion < 0.5) return uFilter;
+  float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5;
+  return uFilter * smoothstep(l - uEdge, l + uEdge, x) * (1. - smoothstep(r - uEdge, r + uEdge, x));
+}
+// Read the exact CPU-sampled v3 debug polygons, avoiding float-noise differences.
+vec2 readBand(float index,float id){
+  vec4 p=texture2D(uWaveShape,vec2((index+.5)/uWaveSamples,(id+.5)/8.));
+  vec2 value=vec2(p.r*65280.+p.g*255.,p.b*65280.+p.a*255.)/65535.;
+  return vec2(value.x*2.-.5,value.y);
+}
+vec2 ribbon(float x,float time,float id){
+  float sampleX=clamp(x,0.,1.)*(uWaveSamples-1.);
+  float i=floor(sampleX);
+  float t=fract(sampleX);
+  vec2 a=readBand(max(i-1.,0.),id),b=readBand(i,id);
+  vec2 c=readBand(min(i+1.,uWaveSamples-1.),id),d=readBand(min(i+2.,uWaveSamples-1.),id);
+  vec2 band=.5*((2.*b)+(-a+c)*t+(2.*a-5.*b+4.*c-d)*t*t+(-a+3.*b-3.*c+d)*t*t*t);
+  band.y=max(.00001,band.y);
+  band.y*=uBody/.2775;
+  return band;
+}
+float sp(float x){ float s = 0.02; return max(x,0.0) + s*log(1.0 + exp(-abs(x)/s)); }
+float lse(float z){ return max(z,0.0) + log(1.0 + exp(-abs(z))); }
+
+float lobe(vec2 q, float d, float ph){
+  float A0 = 3.85004795, A1 = 51.9114232, ta = 0.4778025 + 0.025*uFlow*sin(ph*0.7);
+  float m1 = 0.4932268, mc = 0.2390937;
+  float w0 = 0.00133017, w1 = 0.1130891*uSpread*(1.0 + 0.06*uFlow*sin(ph*0.83 + 1.3)), wc = 0.0134942;
+  float r0 = -0.000355, r1 = 0.0953946*uSpread;
+  float xc = 0.053553, xs = 0.0218024;
+  float t = q.y;
+  float lA = log(A0) - A1*sp(t - ta)*sp(t - ta);
+  float m  = m1*sp(t - mc);
+  float wl = max(w0 + w1*sp(t - wc), 1e-4);
+  float wr = max(r0 + r1*sp(t - mc), 1e-4);
+  float w  = d > m ? wl : wr;
+  float x  = (d - m)/w;
+  return lA - x*x - lse(-(q.x - xc)/xs);
+}
+
+float tone(float logI){
+  float v = exp(0.0517578*logI);
+  float T = 0.97, k = 0.08;
+  v = T - k*lse((T - v)/k) + k*log(1.0 + exp(-T/k));
+  return clamp(v, 0.0, 1.0);
+}
+
+void main(){
+  vec2 frag = gl_FragCoord.xy, uv = frag / uRes;
+  float x = uv.x, y = uv.y, asp = uRes.x / uRes.y;
+  float c = filt(x);
+  float focus = c;
+  float b = (1. - c) * uBlur;
+  float v=0.; vec3 radiance=vec3(0.); vec3 debugColor=vec3(0.); float debugAlpha=0.;
+  // Render each v3 debug silhouette as ink, rather than generating new wave paths.
+  for(int i=0;i<8;i++){
+    if(float(i)>=uWaveCount) break;
+    float id=float(i),density=i==0 ? 1. : i==1 ? .75 : i==2 ? .48 : .58;
+    vec2 band=ribbon(x,uTime,id);
+    float top=band.x-band.y,bottom=band.x+band.y;
+    float yy=1.-y;
+    float feather=max(1./uRes.y,.0005+(1.-focus)*(.001+(1.-uEdgeK)*.012+uBlur*.012));
+    float shape=smoothstep(top-feather,top+feather,yy)*(1.-smoothstep(bottom-feather,bottom+feather,yy));
+    if(uDebug>.5){
+      float tintId=mod(id,4.);
+      vec3 tint=tintId<.5 ? vec3(.282,.667,1.) : tintId<1.5 ? vec3(1.,.706,.357) : tintId<2.5 ? vec3(.545,.875,.682) : vec3(.808,.616,1.);
+      float pixel=1./uRes.y;
+      float inside=step(top,yy)*step(yy,bottom);
+      float outline=1.-smoothstep(pixel*.5,pixel*1.5,min(abs(yy-top),abs(yy-bottom)));
+      float midline=1.-smoothstep(pixel*.5,pixel*1.5,abs(yy-band.x));
+      float alpha=max(inside*.12,max(outline*.85,midline*.9));
+      debugColor=tint*alpha+debugColor*(1.-alpha);
+      debugAlpha=alpha+debugAlpha*(1.-alpha);
+    }
+    // Distance in the local wave frame: a narrow pearl core with asymmetric haze.
+    // Correct for the path slope so steep sections retain the same optical width.
+    float dx=2./uRes.x;
+    float slope=(ribbon(clamp(x+dx,0.,1.),uTime,id).x-ribbon(clamp(x-dx,0.,1.),uTime,id).x)/(2.*dx*asp);
+    float distance=(yy-band.x)/sqrt(1.+slope*slope);
+    float uniformity=uRightHaloUniformity*smoothstep(.40,.65,x);
+    float width=mix(max(.0035,band.y*.70),.0045,uniformity)*uSpread;
+    float sd=distance/width;
+    float falloff=pow(abs(sd),uFoldSteep);
+    float softness=mix(mix(1.35,.85,focus)+b*.4,1.,uniformity);
+    float core=exp(-pow(falloff/(.16*softness),2.));
+    float pearl=exp(-falloff/(.60*softness));
+    float halo=exp(-falloff/(2.25*softness));
+    float bloom=exp(-falloff/(5.5*softness));
+    // Smooth, independently phased clouds vary the white veil along each crest.
+    float cloudPhase=x*9.+id*5.31+uTime*.065*uFlow;
+    float cloud=fbmLo(cloudPhase+fbmLo(x*19.+id*9.7)*2.8);
+    float detail=fbmLo(x*27.+id*3.9+sd*.34-uTime*.035*uFlow);
+    float veilWidth=mix(mix(.48,2.8,smoothstep(.18,.76,cloud)),1.5,uniformity);
+    float veilOffset=(detail-.45)*.85*(1.-uniformity);
+    float veil=exp(-pow(abs(sd-veilOffset)/(veilWidth*softness),1.45));
+    float veilStrength=mix(mix(.08,.62,smoothstep(.15,.78,cloud))*(.65+.5*detail),.32,uniformity);
+    vec3 lavender=vec3(.48,.46,.66);
+    vec3 rose=vec3(.46,.24,.25);
+    vec3 haze=mix(lavender,rose,smoothstep(-.6,1.8,sd));
+    vec3 deepTeal=vec3(.025,.17,.145);
+    float tealCloud=fbmLo(x*7.+id*6.8+sd*.16+uTime*.025*uFlow);
+    float tealMix=smoothstep(.28,.68,tealCloud)*mix(.45,.92,(1.-smoothstep(-3.5,-.4,sd)));
+    tealMix=mix(tealMix,.35,uniformity);
+    haze=mix(haze,deepTeal,tealMix);
+    float drift=mix(.90+.10*sin(x*4.+id*1.7+uTime*.12*uFlow),.90,uniformity);
+    float glowAmount=mix(uLeftGlow,uRightGlow,smoothstep(.40,.65,x));
+    float haloBrightness=mix(uLeftHaloBrightness,1.,smoothstep(.40,.65,x));
+    vec3 emission=(haze*(halo*.47+bloom*.14)
+      +vec3(.72,.70,.86)*pearl*.38+vec3(.96,.97,1.)*veil*veilStrength)*glowAmount*haloBrightness
+      +vec3(1.,.96,.91)*core*.50;
+    radiance+=emission*uWeight*mix(.72,1.,density)*drift;
+  }
+  float filmNoise=hash2(floor(frag/uScale)+floor(uFrame)*17.13)+hash2(floor(frag/uScale)*1.37+floor(uFrame)*7.91+11.)-1.;
+  float isDark=1.-step(.5,dot(uBg,vec3(.299,.587,.114)));
+  vec3 ground=mix(vec3(.77,.75,.77),vec3(.022,.036,.033),isDark);
+  float groundCloud=fbmLo(uv.x*4.2+fbmLo(uv.y*5.1)*2.5);
+  ground=mix(ground,vec3(.018,.10,.083),isDark*(1.-smoothstep(.27,.72,groundCloud))*.82);
+  ground+=vec3(.07,.027,.021)*smoothstep(.2,1.,1.-uv.y)*isDark;
+  vec3 light=vec3(1.)-exp(-radiance*1.55);
+  vec3 col=mix(ground,vec3(.99,.96,1.),light);
+  col*=1.-uVig*.22*smoothstep(.25,.85,length((uv-.5)*vec2(1.1,1.)));
+  // Grain remains visible in the shadows, like the supplied photographic reference.
+  col+=filmNoise*uFilmGrain*(.65+.65*sqrt(max(light.r,max(light.g,light.b))));
+
+  col=col*(1.-debugAlpha)+debugColor;
+  gl_FragColor = vec4(clamp(col, 0., 1.), 1.);
+}`;
+  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aLoc = gl.getAttribLocation(prog, "a"); gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+  const U = {};
+  for (const n of ["uLeftHaloBrightness","uLeftGlow","uRightGlow","uRightHaloUniformity","uSpread","uFlow","uFoldSteep","uFilmGrain","uWaveCount", "uWaveShape", "uWaveSamples", "uDebug", "uRes", "uTime", "uFrame", "uScale", "uFilter", "uRegion", "uPc", "uPw", "uEdge", "uFreq", "uHarm", "uAmp", "uCrestY", "uNoise", "uGrit", "uSpikes", "uBody", "uWeight", "uEdgeK", "uSpray", "uDot", "uStipple", "uBlur", "uGrain", "uVig", "uBg", "uInk"])
+    U[n] = gl.getUniformLocation(prog, n);
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+
+  const shapeTexture=gl.createTexture();
+  function uploadWaveShape(W,H,time){
+    const L={gateX:W*.5},waveWidth={left:1,right:1};
+    const frequency=(.4+S.freq*.05)/1.5;
+    const amplitude=(.2+S.amp*.014)/1.04*(S.foldRise/50);
+    const heightOffset=(S.height-55)*.0045;
+    const harmonics=(S.harm-40)*.001;
+    const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),lerp=(a,b,t)=>a+(b-a)*t;
+function waveProfile(x, seconds) {
+  const smooth = (a, b, v) => { const u = clamp((v - a)/(b - a), 0, 1); return u*u*(3 - 2*u); };
+  const sway = seconds*.32, leftX = clamp(x/L.gateX, 0, 1), rightX = clamp((x - L.gateX)/(W - L.gateX), 0, 1);
+  const side = smooth(L.gateX - W*.025, L.gateX + W*.025, x);
+  const peak = .50 + .055*Math.sin(sway*.41 + 2.1), width = .19 + .025*Math.sin(sway*.39 + 1);
+  const leftSpread = .038 + .10*(1 - smooth(0, .34, leftX)) + (.25 + .055*Math.sin(sway*.71 + 2))*Math.exp(-(((leftX - peak)/width)**2));
+  const rightSpread = lerp(.018, .0015, smooth(0, 1, rightX));
+  const leftWave = .035*Math.sin(leftX*12 + sway) + .018*Math.sin(leftX*21 - sway*.7);
+  const gateWave = .035*Math.sin(12 + sway) + .018*Math.sin(21 - sway*.7);
+  const rightWave = gateWave*(1 - smooth(0, 1, rightX))
+    + (.024*Math.sin(rightX*15 - sway*1.2) + .012*Math.sin(rightX*27 + sway*.8))
+      *smooth(0, .12, rightX)*(1 - .65*rightX);
+  const gateBulge = .075*Math.exp(-(((x - L.gateX)/(W*.075))**2));
+  return { center: H*(.52 + lerp(leftWave, rightWave, side)), spread: H*(lerp(leftSpread*waveWidth.left, rightSpread*waveWidth.right, side) + gateBulge*lerp(waveWidth.left, waveWidth.right, side)) };
+}
+    const count=Math.ceil(W/4)+1,data=new Uint8Array(count*8*4);
+    const bundles=[[-.55,.25],[.12,.15],[.68,.075],[1.12,.12],[-.9,.10],[.38,.19],[.92,.085],[-.28,.14]];
+    const pack=(v,at)=>{const n=Math.round(clamp(v,0,1)*65535);data[at]=n>>8;data[at+1]=n&255;};
+    // Smooth small noise kinks without changing the large lobes or crossings.
+    const sigma=Math.max(.25,count*(.0004+.045*(S.smoothness/100)**2)),radius=Math.ceil(sigma*3);
+    bundles.forEach(([offset,thickness],bundle)=>{
+      const centers=new Float64Array(count),spreads=new Float64Array(count);
+      for(let i=0;i<count;i++){
+        const x=i/(count-1)*W,nx=x/W;
+        // Reference motion: a stationary wave packet; only its internal phase advances.
+        const v=waveProfile(x,0),phase=bundle*1.7,irregularity=S.irregularity/50;
+        const spatial=nx*12*frequency;
+        const carrier=spatial-rippleClock*.26*(S.foldFlow/50)+phase;
+        const gaussian=Math.exp(-(((nx-.27)/.18)**2));
+        const regularEnvelope=H*(.016+.22*gaussian);
+        const envelope=lerp(regularEnvelope,v.spread+H*.012,Math.min(1,irregularity));
+        const phaseWarp=Math.min(1.6,irregularity)*.18*Math.sin(nx*(17+bundle*.7)*frequency+phase*.6);
+        const fundamental=Math.sin(carrier+phaseWarp);
+        const overtone=(harmonics*.45+Math.max(0,irregularity-1)*.12)*Math.sin(2*carrier+.7);
+        const localDetail=Math.min(1.6,irregularity)*.10*Math.sin(spatial*1.9-rippleClock*.38*(S.foldFlow/50)+phase*1.3);
+        const baseline=lerp(H*.52,v.center,Math.min(1,irregularity));
+        const center=baseline+envelope*(.82*fundamental+overtone+localDetail)
+          +offset*envelope*.10*Math.cos(carrier*.5+phase);
+        // Blend from the unchanged left packet into the adjustable right tail.
+        const transition=clamp((nx-.40)/.25,0,1);
+        const rightBlend=transition*transition*(3-2*transition);
+        const separation=lerp(1,S.rightWaves/100,rightBlend);
+        centers[i]=.52+(center/H-.52)*amplitude*separation+heightOffset;
+        // The packet outline stays put; subtle internal compression follows its phase.
+        const widthEnvelope=lerp(regularEnvelope,v.spread,Math.min(1,irregularity));
+        const waveSpread=widthEnvelope*thickness/H*(.94+.06*Math.cos(carrier*2+phase));
+        spreads[i]=lerp(.0025,waveSpread,separation);
+      }
+      for(let i=0;i<count;i++){
+        let center=0,spread=0,total=0;
+        for(let j=-radius;j<=radius;j++){
+          const weight=Math.exp(-.5*(j/sigma)**2),index=clamp(i+j,0,count-1);
+          center+=centers[index]*weight;spread+=spreads[index]*weight;total+=weight;
+        }
+        const at=(bundle*count+i)*4;
+        pack((center/total+.5)/2,at);pack(spread/total,at+2);
+      }
+    });
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,shapeTexture);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,count,8,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+    gl.uniform1i(U.uWaveShape,0);gl.uniform1f(U.uWaveSamples,count);
+  }
+  const paneAt = t => ({ pc: S.sweep === "on" ? 0.5 + 0.34 * Math.sin(t * 0.4) : S.px, pw: 0.08 + S.pwidth / 100 * 0.6 });
+  function renderGL(W, H, t, frameNo, scale) {
+    if (glc.width !== W || glc.height !== H) { glc.width = W; glc.height = H; }
+    gl.viewport(0, 0, W, H);
+    const f = S.filter / 100 * (S.breathe === "on" ? 0.5 - 0.5 * Math.cos(t * 0.7) : 1);
+    const { pc, pw } = paneAt(t);
+    uploadWaveShape(W/scale,H/scale,t);
+    gl.uniform1f(U.uLeftHaloBrightness,S.leftHaloBrightness/50);
+    gl.uniform1f(U.uLeftGlow,S.leftGlow/50);
+    gl.uniform1f(U.uRightGlow,S.rightGlow/50);
+    gl.uniform1f(U.uRightHaloUniformity,S.rightHaloUniformity/100);
+    gl.uniform1f(U.uSpread,.5+S.foldSpread*.01);
+    gl.uniform1f(U.uFlow,S.foldFlow/50);
+    gl.uniform1f(U.uFoldSteep,.6+S.foldSteep*.008);
+    gl.uniform1f(U.uFilmGrain,S.filmGrain*.002);
+    gl.uniform1f(U.uWaveCount, S.waveCount);
+    gl.uniform1f(U.uDebug, S.debugWave ? 1 : 0);
+    gl.uniform2f(U.uRes, W, H); gl.uniform1f(U.uTime, t); gl.uniform1f(U.uFrame, frameNo); gl.uniform1f(U.uScale, scale);
+    gl.uniform1f(U.uFilter, f); gl.uniform1f(U.uRegion, S.region === "pane" ? 1 : 0); gl.uniform1f(U.uPc, pc); gl.uniform1f(U.uPw, pw);
+    gl.uniform1f(U.uEdge, 0.01 + S.edge / 100 * 0.16);
+    gl.uniform1f(U.uFreq, 0.4 + S.freq / 100 * 5); gl.uniform1f(U.uHarm, S.harm / 100); gl.uniform1f(U.uAmp, 0.2 + S.amp / 100 * 1.4);
+    gl.uniform1f(U.uCrestY, 0.3 + S.height / 100 * 0.45); gl.uniform1f(U.uNoise, S.noise / 100 * 1.4); gl.uniform1f(U.uGrit, S.grit / 100); gl.uniform1f(U.uSpikes, S.spikes / 100);
+    gl.uniform1f(U.uBody, 0.03 + S.body / 100 * 0.45);
+    gl.uniform1f(U.uWeight, 0.3 + S.weight / 100 * 1.2);
+    gl.uniform1f(U.uEdgeK, S.edgek / 100);
+    gl.uniform1f(U.uSpray, S.spray / 100 * 1.4);
+    gl.uniform1f(U.uDot, 0.55 + S.dot / 100 * 2.2);
+    gl.uniform1f(U.uStipple, S.stipple / 100);
+    gl.uniform1f(U.uBlur, S.blur / 100);
+    gl.uniform1f(U.uGrain, S.grain / 100);
+    gl.uniform1f(U.uVig, S.vignette / 100);
+    gl.uniform3fv(U.uBg, rgb(S.bg)); gl.uniform3fv(U.uInk, rgb(S.ink));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // ---------- layout & drag ----------
+  let dpr = 1, cssW = 0, cssH = 0;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const stage = $("stage"), bw = stage.clientWidth, bh = stage.clientHeight;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = S.ar === "viewport" ? bh : bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    // Render fine dissolve specks above display resolution, then downsample smoothly.
+    dpr = Math.min(Math.max(2, window.devicePixelRatio || 1), 3, 3200 / Math.max(w, h));
+    cssW = Math.round(w); cssH = Math.round(h);
+    out.style.width = cssW + "px"; out.style.height = cssH + "px";
+    out.width = Math.round(w * dpr); out.height = Math.round(h * dpr);
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe($("stage"));
+  let dragging = false;
+  const setPx = e => { const r = out.getBoundingClientRect(); S.px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); dirty = true; };
+  out.addEventListener("pointerdown", e => {
+    dragging = true; out.setPointerCapture(e.pointerId);
+    if (S.sweep === "on" || S.region !== "pane") { S.sweep = "off"; S.region = "pane"; syncUI(); }
+    setPx(e);
+  });
+  out.addEventListener("pointermove", e => { if (dragging) setPx(e); });
+  const endDrag = () => { if (dragging) { dragging = false; persist(); } };
+  out.addEventListener("pointerup", endDrag);
+  out.addEventListener("pointercancel", endDrag);
+  out.style.cursor = "ew-resize";
+
+  document.addEventListener('visibilitychange', () => { last=performance.now(); });
+
+  // ---------- loop ----------
+  let simT = 3, rippleClock = 0, frameNo = 1, frameAcc = 0, last = performance.now();
+  function frame(W, H, scale, c) { renderGL(W, H, simT, frameNo, scale); c.drawImage(glc, 0, 0, W, H); }
+  function tick(now) {
+    const dt = document.hidden ? 0 : Math.max(0, (now - last) / 1000); last = now;
+    if (playing) {
+      const sp = 0.15 + S.speed / 100 * 1.8;
+      simT += dt * sp; rippleClock += dt*S.rippleSpeed; frameAcc += dt * 24;
+      if (frameAcc >= 1) { frameNo += Math.floor(frameAcc); frameAcc %= 1; }
+    }
+    if ((playing || dirty) && out.width) { frame(out.width, out.height, dpr, octx); dirty = false; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export & settings ----------
+  const dlReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+  $("exPng").onclick = () => {
+    const [aw, ah] = S.ar === "viewport" ? [cssW, cssH] : S.ar.split(":").map(Number);
+    const long = Math.min(3200, gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+    const W = aw >= ah ? long : Math.round(long * aw / ah), H = aw >= ah ? Math.round(long * ah / aw) : long;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    frame(W, H, W / cssW, c.getContext("2d"));
+    c.toBlob(b => { dirty = true; b ? saveFile("opal-waves-v8.png", b) : status("PNG export failed"); }, "image/png");
+  };
+  let recorder = null, recordTimer = null;
+  $("exVid").onclick = () => {
+    const button = $("exVid");
+    if (recorder && recorder.state === "recording") {
+      button.disabled = true; button.textContent = "Saving?";
+      clearInterval(recordTimer); recorder.stop(); return;
+    }
+    if (!out.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    let stream;
+    const restore = () => {
+      clearInterval(recordTimer);
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      recorder = null; button.disabled = false; button.textContent = "Record video";
+      button.classList.remove("fill"); button.setAttribute("aria-pressed", "false");
+    };
+    try {
+      stream = out.captureStream(60);
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 24e6 });
+      const chunks = []; let failed = false;
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      rec.onerror = () => { failed = true; restore(); status("Recording failed. Please try again."); };
+      rec.onstop = () => {
+        restore();
+        if (failed) return;
+        const blob = new Blob(chunks, { type: rec.mimeType || mime });
+        if (!blob.size) { status("No video captured. Please try again."); return; }
+        const ext = blob.type.startsWith("video/mp4") ? "mp4" : "webm";
+        saveFile(`opal-waves-v8-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`, blob);
+      };
+      rec.start(250); recorder = rec;
+      if (!playing) { playing = true; syncUI(); }
+      const started = performance.now();
+      const paintRecording = () => {
+        const seconds = Math.floor((performance.now() - started) / 1000);
+        button.textContent = `Stop ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+      };
+      button.classList.add("fill"); button.setAttribute("aria-pressed", "true");
+      paintRecording(); recordTimer = setInterval(paintRecording, 250);
+      status("Recording canvas. Click Stop to download.");
+    } catch (e) { restore(); status("Couldn't start recording: " + e.message); }
+  };
+  $("copySet").onclick = () => {
+    const code = JSON.stringify(S), box = $("setBox");
+    box.hidden = false; box.value = code; $("applySet").hidden = true;
+    const fallback = () => { box.focus(); box.select(); status("Select all and copy the settings above."); };
+    try { navigator.clipboard.writeText(code).then(() => status("Settings copied. Paste them anywhere to share this look."), fallback); } catch (e) { fallback(); }
+  };
+  $("loadSet").onclick = () => { const box = $("setBox"); box.hidden = false; box.value = ""; box.placeholder = "Paste settings here"; box.focus(); $("applySet").hidden = false; };
+  $("applySet").onclick = () => {
+    try {
+      const v = JSON.parse($("setBox").value);
+      if (!v || typeof v !== "object") throw 0;
+      S = Object.assign(defaults(), v);
+      applyTheme(currentTheme);
+      syncUI(); layout(); changed();
+      $("setBox").hidden = true; $("applySet").hidden = true;
+      status("Settings loaded");
+    } catch (e) { status("Those settings couldn't be read. Paste the full text from Copy settings."); }
+  };
+
+  let currentTheme='light';
+  const applyTheme = value => {
+    currentTheme=value==='dark'?'dark':'light';
+    document.documentElement.dataset.theme=currentTheme;
+    S.bg=currentTheme==='dark'?'#111214':'#ecebe8';
+    S.ink=currentTheme==='dark'?'#ffffff':'#000000';
+    S.palette=currentTheme==='dark'?'night':'paper';
+    try{localStorage.setItem('gray-theme',currentTheme);}catch(e){}
+    syncUI();changed();dispatchEvent(new Event('graytheme'));
+  };
+  window.__grayTheme={get:()=>currentTheme,set:applyTheme};
+  let initialTheme=new URLSearchParams(location.search).get('theme');
+  try{initialTheme=initialTheme||localStorage.getItem('gray-theme');}catch(e){}
+  applyTheme(new URLSearchParams(location.search).get('theme')||'dark');
+
+  // ---------- boot ----------
+  syncUI();
+  layout();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty = true; });
+  requestAnimationFrame(tick);
+})();
+</script>
+<script>
+(() => {
+  const app=document.querySelector('.app'),button=document.createElement('button');
+  button.className='control-toggle';button.type='button';button.setAttribute('aria-controls','v8Panel');
+  document.querySelector('.panel').id='v8Panel';
+  let open=false; const paint=()=>{app.classList.toggle('controls-closed',!open);button.textContent=open?'Close controls':'Controls';button.setAttribute('aria-expanded',String(open));};
+  button.onclick=()=>{open=!open;paint();};addEventListener('keydown',e=>{if(e.key==='Escape'){open=false;paint();}});
+  document.body.append(button);paint();
+})();
+</script>
+</body>
+</html>
