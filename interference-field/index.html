@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interference Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, shader stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 64px; height: 64px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:active { cursor: grabbing; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 29px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn.quiet:hover { color: var(--panel-fg); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.comps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.comp { display: grid; gap: 5px; padding: 4px 4px 6px; border-radius: 5px; border: 1px solid #2e2f33; background: transparent; color: var(--panel-muted); cursor: pointer; font: 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.comp canvas { width: 100%; height: auto; display: block; border-radius: 3px; background: #1a1a1c; }
+.comp:hover { color: var(--panel-fg); }
+.comp[aria-pressed="true"] { border-color: var(--panel-fg); color: var(--panel-fg); box-shadow: inset 0 0 0 1px var(--panel-fg); }
+.comp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.swc { display: grid; justify-items: center; gap: 4px; font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #cfd0d3; }
+.stage canvas { display: block; box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 20px 50px -20px rgba(20,20,40,.25); }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #1a1c20; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+.txt { width: 100%; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font-family: var(--mono); }
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Interference controls">
+    <div class="ph"><b>INTERFERENCE</b><span id="compName">Pair</span></div>
+
+    <div class="sec">
+      <span class="lbl">Composition</span>
+      <div class="comps" id="comps" role="group" aria-label="Composition"></div>
+      <div class="row"><span class="lbl" title="Morph through every composition in turn.">Auto cycle</span>
+        <div class="seg" role="group" aria-label="Auto cycle">
+          <button type="button" data-cycle="off">Off</button>
+          <button type="button" data-cycle="on">On</button>
+        </div>
+      </div>
+      <div id="timingCtl" style="display:grid;gap:16px"></div>
+    </div>
+
+    <div class="sec" id="glassCtl">
+      <span class="sub">Glass filter</span>
+      <div class="chips" role="group" aria-label="Glass type">
+        <button type="button" class="chip" data-gtype="off">Off</button>
+        <button type="button" class="chip" data-gtype="ripple">Ripple</button>
+        <button type="button" class="chip" data-gtype="reeds">Reeds</button>
+        <button type="button" class="chip" data-gtype="liquid">Liquid</button>
+        <button type="button" class="chip" data-gtype="lens">Lens</button>
+      </div>
+      <div class="row"><span class="lbl">Cover</span>
+        <div class="seg" role="group" aria-label="Glass coverage">
+          <button type="button" data-gcover="full">Full</button>
+          <button type="button" data-gcover="pane">Pane</button>
+          <button type="button" data-gcover="circle">Circle</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The glass glides back and forth across the composition.">Sweep</span>
+        <div class="seg" role="group" aria-label="Sweep">
+          <button type="button" data-gsweep="off">Off</button>
+          <button type="button" data-gsweep="on">On</button>
+        </div>
+      </div>
+      <p class="hint">Drag on the image to move the glass.</p>
+      <div class="dials" id="glassDials"></div>
+    </div>
+
+    <div class="sec" id="formCtl"><span class="sub">Form</span><div class="dials" id="formDials"></div></div>
+    <div class="sec" id="waveCtl"><span class="sub">Bands</span></div>
+
+    <div class="sec" id="colorCtl">
+      <span class="sub">Color</span>
+      <div class="chips" role="group" aria-label="Palette" id="palChips"></div>
+      <div class="sws">
+        <label class="swc"><input type="color" class="sw" data-col="k0">Center</label>
+        <label class="swc"><input type="color" class="sw" data-col="k1">Inner</label>
+        <label class="swc"><input type="color" class="sw" data-col="k2">Mid</label>
+        <label class="swc"><input type="color" class="sw" data-col="k3">Rim</label>
+        <label class="swc"><input type="color" class="sw" data-col="k4">Fringe</label>
+        <label class="swc"><input type="color" class="sw" data-col="bg">Ground</label>
+      </div>
+    </div>
+
+    <div class="sec" id="motionCtl"><span class="sub">Motion &amp; texture</span></div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="16:9">16:9</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="4:5">4:5</button>
+          <button type="button" data-ar="9:16">9:16</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record</button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="play" type="button">Pause</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="btns">
+        <button class="btn quiet" id="copySet" type="button">Copy settings</button>
+        <button class="btn quiet" id="loadSet" type="button">Load settings</button>
+      </div>
+      <textarea class="txt" id="setBox" rows="4" hidden aria-label="Settings code" style="height:auto;padding:8px 10px;font-size:10px;line-height:1.4;resize:vertical"></textarea>
+      <button class="btn" id="applySet" type="button" hidden>Apply pasted settings</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="cv" aria-label="Interference field preview"></canvas>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  // Every composition is a point in the same parameter space, so any two morph smoothly.
+  const COMPS = {
+    orb:     { name: "Orb",     size: 42, sizeB: 0,   sep: 0,  angle: 0,  merge: 0,  bridge: 0,  stretch: 0,   rings: 14,  freq: 40, falloff: 30,  disp: 25, balance: 0,  core: 15, soft: 30 },
+    pair:    { name: "Pair",    size: 30, sizeB: 100, sep: 58, angle: 0,  merge: 0,  bridge: 70, stretch: 0,   rings: 16,  freq: 45, falloff: 22,  disp: 30, balance: 70, core: 22, soft: 35 },
+    capsule: { name: "Capsule", size: 30, sizeB: 100, sep: 34, angle: 90, merge: 92, bridge: 0,  stretch: 0,   rings: 40,  freq: 62, falloff: 75,  disp: 55, balance: 15, core: 10, soft: 22 },
+    field:   { name: "Field",   size: 24, sizeB: 0,   sep: 0,  angle: 0,  merge: 0,  bridge: 0,  stretch: 100, rings: 35,  freq: 28, falloff: 90,  disp: 20, balance: 0,  core: 0,  soft: 75 },
+    core:    { name: "Core",    size: 34, sizeB: 0,   sep: 0,  angle: 0,  merge: 0,  bridge: 0,  stretch: 0,   rings: 8,   freq: 30, falloff: 55,  disp: 15, balance: 0,  core: 85, soft: 55 },
+    halo:    { name: "Halo",    size: 26, sizeB: 0,   sep: 0,  angle: 0,  merge: 0,  bridge: 0,  stretch: 0,   rings: 60,  freq: 55, falloff: 100, disp: 50, balance: 0,  core: 15, soft: 25 }
+  };
+  const ORDER = Object.keys(COMPS);
+  const SHAPE = ["size", "sizeB", "sep", "angle", "merge", "bridge", "stretch", "rings", "freq", "falloff", "disp", "balance", "core", "soft"];
+
+  const PALETTES = {
+    iris:   { name: "Iris",   k0: "#6a5be6", k1: "#a45fe0", k2: "#d77cc6", k3: "#6aa2ec", k4: "#eaa8ea", bg: "#eff1f4" },
+    cobalt: { name: "Cobalt", k0: "#0d1b78", k1: "#1f5ff0", k2: "#2f8cf5", k3: "#9a8af2", k4: "#f4a3db", bg: "#f7f6f8" },
+    lilac:  { name: "Lilac",  k0: "#aeb1f6", k1: "#c3b0f6", k2: "#d8c6f8", k3: "#e9d6fb", k4: "#f1c9f5", bg: "#e4daf7" },
+    ember:  { name: "Ember",  k0: "#c93a22", k1: "#ef7a3c", k2: "#f6a76a", k3: "#f0b98d", k4: "#f6d9c4", bg: "#f6f1ea" },
+    mono:   { name: "Mono",   k0: "#1d1f24", k1: "#4b4f58", k2: "#8c9099", k3: "#c4c7cd", k4: "#dfe1e5", bg: "#f2f2f0" },
+    night:  { name: "Night",  k0: "#3b2df0", k1: "#7c4dff", k2: "#d35cd8", k3: "#3aa0ff", k4: "#ff7ad9", bg: "#06070b" }
+  };
+
+  function defaults() {
+    const c = COMPS.pair, p = PALETTES.iris;
+    const S = { comp: "pair", palette: "iris", ar: "16:9", cycle: "off", hold: 2, morph: 2.5, flow: 30, pulse: 45, speed: 40, grain: 12,
+      gtype: "ripple", gcover: "full", gsweep: "off", gx: 0, gy: 0, gsize: 55, grefr: 30, gfreq: 55, gflow: 35, gchroma: 35, ghi: 40, gfrost: 0, gang: 0 };
+    for (const k of SHAPE) S[k] = c[k];
+    for (const k of ["k0", "k1", "k2", "k3", "k4", "bg"]) S[k] = p[k];
+    // approved look for the shared site
+    return Object.assign(S, {"comp": "pair", "palette": "mono", "ar": "16:9", "cycle": "off", "hold": 2, "morph": 2.5, "flow": 30, "pulse": 45, "speed": 40, "grain": 12, "gtype": "ripple", "gcover": "full", "gsweep": "off", "gx": 0, "gy": 0, "gsize": 97, "grefr": 69, "gfreq": 55, "gflow": 35, "gchroma": 35, "ghi": 12, "gfrost": 0, "gang": 0, "size": 30, "sizeB": 100, "sep": 58, "angle": 0, "merge": 0, "bridge": 70, "stretch": 0, "rings": 16, "freq": 45, "falloff": 22, "disp": 30, "balance": 70, "core": 22, "soft": 35, "k0": "#1d1f24", "k1": "#4b4f58", "k2": "#8c9099", "k3": "#c4c7cd", "k4": "#dfe1e5", "bg": "#f2f2f0"});
+  }
+  const KEY = "interference-field-v2";
+  let S = defaults();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(defaults(), s); } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), stage = $("stage");
+  let dirty = true;
+  const changed = () => { persist(); dirty = true; };
+
+  // ---------- sliders ----------
+  const SLIDERS = [
+    ["gsize", "Glass size", "Size of the pane or circle, and how far ripples spread.", "glassCtl"],
+    ["grefr", "Refraction", "How strongly the glass bends the pattern beneath it.", "glassCtl"],
+    ["gfreq", "Scale", "Density of the ripples, reeds or liquid waves.", "glassCtl"],
+    ["gflow", "Glass flow", "How fast the glass surface moves.", "glassCtl"],
+    ["gchroma", "Chroma", "Splits colors at the bends, like light through real glass.", "glassCtl"],
+    ["ghi", "Highlight", "Specular light catching the glass surface.", "glassCtl"],
+    ["gfrost", "Frost", "Frosted, sandblasted texture inside the glass.", "glassCtl"],
+    ["size", "Size", "Radius of the main orb.", "formCtl"],
+    ["sizeB", "Second orb", "Size of the second orb, relative to the first. 0 hides it.", "formCtl"],
+    ["sep", "Separation", "Distance between the two orbs.", "formCtl"],
+    ["merge", "Merge", "How much the two orbs melt into one shape.", "formCtl"],
+    ["bridge", "Bridge", "Smeared band of light connecting the two orbs.", "formCtl"],
+    ["stretch", "Stretch", "Pulls the orb sideways into horizontal bands.", "formCtl"],
+    ["soft", "Softness", "How much edges blur into the ground.", "formCtl"],
+    ["rings", "Rings", "Strength of the concentric interference rings.", "waveCtl"],
+    ["freq", "Frequency", "How many rings fit across the orb.", "waveCtl"],
+    ["falloff", "Echo", "How far the rings ripple out beyond the edge.", "waveCtl"],
+    ["disp", "Dispersion", "Splits the rings into iridescent color fringes.", "waveCtl"],
+    ["balance", "Balance", "Shifts the left orb to a different color state than the right.", "colorCtl"],
+    ["core", "Core depth", "Darkens the very center of each orb.", "colorCtl"],
+    ["flow", "Ring flow", "How fast rings travel outward.", "motionCtl"],
+    ["pulse", "Pulse", "Orbs swap color states and breathe over time.", "motionCtl"],
+    ["speed", "Speed", "Overall speed of all motion.", "motionCtl"],
+    ["grain", "Grain", "Film grain over the whole image.", "motionCtl"],
+    ["hold", "Hold", "Seconds each composition holds during auto cycle.", "timingCtl", 0, 8, 0.5],
+    ["morph", "Morph", "Seconds each transition takes, during auto cycle and when you pick a composition.", "timingCtl", 0.5, 6, 0.5]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent, min = 0, max = 100, step = 1] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="${min}" max="${max}" step="${step}"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent);
+    if (parent === "formCtl") host.insertBefore(w, $("formDials"));
+    else if (parent === "glassCtl") host.insertBefore(w, $("glassDials"));
+    else if (parent === "colorCtl") host.appendChild(w);
+    else host.appendChild(w);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub, min, max };
+    input.addEventListener("input", () => { tween = null; S[k] = +input.value; syncSlider(k); changed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub, min, max } = sliderEls[k], v = S[k];
+    input.value = v;
+    bub.textContent = Number.isInteger(+v) ? Math.round(v) : (+v).toFixed(1);
+    bub.style.left = `calc(${(v - min) / (max - min)} * (100% - 24px))`;
+  }
+
+  // ---------- dial ----------
+  const dials = {};
+  function makeDial(key, label, host) {
+    const d = document.createElement("div");
+    d.className = "dial";
+    d.innerHTML = `<div class="knob" role="slider" tabindex="0" aria-label="${label}" aria-valuemin="0" aria-valuemax="359"><div class="needle"></div><span>${label}</span></div><div class="dv"></div>`;
+    host.appendChild(d);
+    const knob = d.querySelector(".knob"), needle = d.querySelector(".needle"), dv = d.querySelector(".dv");
+    dials[key] = { knob, needle, dv };
+    const setFrom = e => {
+      const r = knob.getBoundingClientRect();
+      const a = Math.atan2(-(e.clientY - r.top - r.height / 2), e.clientX - r.left - r.width / 2) * 180 / Math.PI;
+      tween = null; S[key] = Math.round((a + 360) % 360); syncDial(key); changed();
+    };
+    knob.addEventListener("pointerdown", e => { knob.setPointerCapture(e.pointerId); setFrom(e); });
+    knob.addEventListener("pointermove", e => { if (knob.hasPointerCapture(e.pointerId)) setFrom(e); });
+    knob.addEventListener("keydown", e => {
+      const step = e.shiftKey ? 15 : 5;
+      if (e.key === "ArrowRight" || e.key === "ArrowUp") S[key] = (S[key] + step) % 360;
+      else if (e.key === "ArrowLeft" || e.key === "ArrowDown") S[key] = (S[key] - step + 360) % 360;
+      else return;
+      tween = null; e.preventDefault(); syncDial(key); changed();
+    });
+  }
+  function syncDial(key) {
+    const { knob, needle, dv } = dials[key], v = Math.round(((S[key] % 360) + 360) % 360);
+    needle.style.transform = `rotate(${-v}deg)`;
+    knob.setAttribute("aria-valuenow", v);
+    dv.textContent = v + "°";
+  }
+  makeDial("angle", "Axis", $("formDials"));
+  makeDial("gang", "Angle", $("glassDials"));
+
+  // ---------- composition tiles ----------
+  for (const id of ORDER) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "comp"; b.dataset.comp = id;
+    b.innerHTML = `<canvas width="120" height="68"></canvas><span>${COMPS[id].name}</span>`;
+    b.onclick = () => { if (S.cycle === "on") { S.cycle = "off"; } goTo(id); };
+    $("comps").appendChild(b);
+  }
+
+  // ---------- tween between compositions ----------
+  let tween = null;
+  const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  function goTo(id) {
+    const from = {}, to = {};
+    for (const k of SHAPE) { from[k] = S[k]; to[k] = COMPS[id][k]; }
+    const d = ((to.angle - from.angle) % 360 + 540) % 360 - 180;
+    to.angle = from.angle + d;
+    tween = { from, to, t0: clock, dur: Math.max(0.05, S.morph) };
+    S.comp = id; syncUI(); persist();
+  }
+  function stepTween() {
+    if (!tween) return;
+    const x = Math.min(1, (clock - tween.t0) / tween.dur), e = ease(x);
+    for (const k of SHAPE) S[k] = tween.from[k] + (tween.to[k] - tween.from[k]) * e;
+    if (x >= 1) { S.angle = ((S.angle % 360) + 360) % 360; tween = null; persist(); }
+    syncShapeUI();
+  }
+  let cycleAt = 0;
+  function stepCycle() {
+    if (S.cycle !== "on" || tween) return;
+    if (clock - cycleAt >= S.hold) {
+      const next = ORDER[(ORDER.indexOf(S.comp) + 1) % ORDER.length];
+      goTo(next); cycleAt = clock + S.morph;
+    }
+  }
+
+  // ---------- palettes ----------
+  for (const [id, p] of Object.entries(PALETTES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.pal = id;
+    b.innerHTML = `<i style="background:radial-gradient(circle, ${p.k0}, ${p.k1} 40%, ${p.k3} 70%, ${p.k4})"></i>${p.name}`;
+    b.onclick = () => { S.palette = id; for (const k of ["k0", "k1", "k2", "k3", "k4", "bg"]) S[k] = p[k]; syncUI(); changed(); refreshThumbs(); };
+    $("palChips").appendChild(b);
+  }
+  document.querySelectorAll("[data-col]").forEach(inp => inp.addEventListener("input", () => { S[inp.dataset.col] = inp.value; S.palette = "custom"; syncUI(); changed(); }));
+  document.querySelectorAll("[data-cycle]").forEach(b => b.onclick = () => { S.cycle = b.dataset.cycle; cycleAt = clock; syncUI(); changed(); });
+  document.querySelectorAll("[data-ar]").forEach(b => b.onclick = () => { S.ar = b.dataset.ar; syncUI(); layout(); changed(); });
+  let glassFade = 1;
+  document.querySelectorAll("[data-gtype]").forEach(b => b.onclick = () => { if (S.gtype !== b.dataset.gtype) glassFade = 0; S.gtype = b.dataset.gtype; syncUI(); changed(); });
+  document.querySelectorAll("[data-gcover]").forEach(b => b.onclick = () => { S.gcover = b.dataset.gcover; if (S.gtype === "off") { S.gtype = "ripple"; glassFade = 0; } syncUI(); changed(); });
+  document.querySelectorAll("[data-gsweep]").forEach(b => b.onclick = () => { S.gsweep = b.dataset.gsweep; syncUI(); changed(); });
+
+  // Drag on the canvas to place the glass.
+  const toWorld = e => {
+    const r = cv.getBoundingClientRect(), m = Math.min(r.width, r.height);
+    return [(e.clientX - r.left - r.width / 2) / m, -(e.clientY - r.top - r.height / 2) / m];
+  };
+  let draggingGlass = false;
+  cv.addEventListener("pointerdown", e => {
+    if (S.gtype === "off") return;
+    draggingGlass = true; cv.setPointerCapture(e.pointerId);
+    if (S.gsweep === "on") { S.gsweep = "off"; syncUI(); }
+    [S.gx, S.gy] = toWorld(e); dirty = true;
+  });
+  cv.addEventListener("pointermove", e => { if (draggingGlass) { [S.gx, S.gy] = toWorld(e); dirty = true; } });
+  const endGlass = () => { if (draggingGlass) { draggingGlass = false; persist(); } };
+  cv.addEventListener("pointerup", endGlass);
+  cv.addEventListener("pointercancel", endGlass);
+
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = defaults(); tween = null; syncUI(); layout(); changed(); status("Reset to defaults"); };
+  $("copySet").onclick = () => {
+    const code = JSON.stringify(S), box = $("setBox");
+    box.hidden = false; box.value = code; $("applySet").hidden = true;
+    const fallback = () => { box.focus(); box.select(); status("Select all and copy the settings above."); };
+    try { navigator.clipboard.writeText(code).then(() => status("Settings copied. Paste them anywhere to share this look."), fallback); } catch (e) { fallback(); }
+  };
+  $("loadSet").onclick = () => { const box = $("setBox"); box.hidden = false; box.value = ""; box.placeholder = "Paste settings here"; box.focus(); $("applySet").hidden = false; };
+  $("applySet").onclick = () => {
+    try {
+      const v = JSON.parse($("setBox").value);
+      if (!v || typeof v !== "object") throw 0;
+      S = Object.assign(defaults(), v); tween = null;
+      syncUI(); layout(); changed();
+      $("setBox").hidden = true; $("applySet").hidden = true;
+      status("Settings loaded");
+    } catch (e) { status("Those settings couldn't be read. Paste the full text from Copy settings."); }
+  };
+
+  function syncShapeUI() {
+    for (const k of SHAPE) if (sliderEls[k]) syncSlider(k);
+    syncDial("angle");
+  }
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    syncDial("angle"); syncDial("gang");
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    press("comp", S.comp); press("pal", S.palette); press("cycle", S.cycle); press("ar", S.ar);
+    press("gtype", S.gtype); press("gcover", S.gcover); press("gsweep", S.gsweep);
+    document.querySelectorAll("[data-col]").forEach(inp => inp.value = S[inp.dataset.col]);
+    $("compName").textContent = S.cycle === "on" ? "Cycling" : COMPS[S.comp].name;
+    $("play").textContent = playing ? "Pause" : "Play";
+    $("exVid").textContent = S.cycle === "on" ? "Record cycle" : "Record 8s";
+  }
+
+  // ---------- WebGL ----------
+  const gl = cv.getContext("webgl", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+  if (!gl) {
+    stage.innerHTML = '<div class="err">This tool needs WebGL, which isn\'t available in this browser. Try a recent Chrome, Safari or Firefox with hardware acceleration on.</div>';
+    return;
+  }
+  const VS = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uPhase, uScale;
+uniform vec2 uC1, uC2; uniform float uR1, uR2;
+uniform float uMerge, uBridge, uStretch, uAmp, uFreq, uFall, uDisp, uBal, uPulse, uSoft, uCore, uGrain;
+uniform vec3 uK0, uK1, uK2, uK3, uK4, uBg;
+uniform int uGType, uGCover; uniform vec2 uGC;
+uniform float uGSize, uGRefr, uGFreq, uGPhase, uGChroma, uGHi, uGFrost, uGAng, uGFade;
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
+  return mix(mix(hash(i), hash(i + vec2(1., 0.)), u.x), mix(hash(i + vec2(0., 1.)), hash(i + vec2(1., 1.)), u.x), u.y);
+}
+float smin(float a, float b, float k){
+  if (k <= 0.0001) return min(a, b);
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0., 1.);
+  return mix(b, a, h) - k * h * (1. - h);
+}
+// s: 1 at the center, 0 at the edge, negative outside.
+vec3 ramp(float s){
+  s = clamp(s, 0., 1.);
+  vec3 c = mix(uK4, uK3, smoothstep(0.0, 0.06, s));
+  c = mix(c, uK2, smoothstep(0.05, 0.26, s));
+  c = mix(c, uK1, smoothstep(0.35, 0.72, s));
+  c = mix(c, uK0, smoothstep(0.68, 1.0, s));
+  return c;
+}
+
+float fbm(vec2 p){ float a = 0.5, s = 0.; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+float sdBox(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - r; }
+
+// The composition underneath the glass.
+vec3 scene(vec2 p){
+  vec2 sx = vec2(1. / uStretch, 1.);
+
+  float d1 = length((p - uC1) * sx) - uR1;
+  float d2 = uR2 > 0.002 ? length((p - uC2) * sx) - uR2 : 1e3;
+  float d = smin(d1, d2, uMerge);
+  float w1 = 1. / (0.002 + max(d1, 0.) + 0.3 * uR1), w2 = uR2 > 0.002 ? 1. / (0.002 + max(d2, 0.) + 0.3 * uR2) : 0.;
+  float R = (w1 * uR1 + w2 * uR2) / (w1 + w2);
+  float s = -d / R;
+
+  // Each orb carries a color state; balance offsets the first, pulse swaps them over time.
+  float st1 = uBal * 0.45 + uPulse * 0.22 * (0.5 + 0.5 * sin(uTime * 0.9));
+  float st2 = uPulse * 0.22 * (0.5 + 0.5 * sin(uTime * 0.9 + 3.14159));
+  float state = (w1 * st1 + w2 * st2) / (w1 + w2);
+
+  // Interference: rings travel through the field and echo beyond the edge.
+  float wave = sin(s * uFreq * 6.2831853 + uPhase);
+  float env = s > 0. ? 1. : exp(s / uFall);
+  float sr = s + uAmp * wave * env * 0.5;
+  float sIn = sr * (1. - state);
+
+  vec3 col;
+  col.r = ramp(sIn - uDisp).r;
+  col.g = ramp(sIn).g;
+  col.b = ramp(sIn + uDisp).b;
+  col = mix(col, uK0 * 0.35, uCore * smoothstep(0.62, 1.0, s) * 0.9);
+
+  float body = smoothstep(-uSoft, uSoft * 0.4, s);
+  float echo = exp(s / uFall) * (0.5 + 0.5 * cos(s * uFreq * 6.2831853 + uPhase)) * min(1., uAmp * 3.) * step(s, 0.);
+  vec3 echoCol = mix(uK4, uK3, 0.5 + 0.5 * sin(s * uFreq * 3.14159 + uPhase));
+  echoCol.r = mix(uK4, uK3, 0.5 + 0.5 * sin((s - uDisp) * uFreq * 3.14159 + uPhase)).r;
+
+  vec3 outc = uBg;
+
+  // Bridge: a band of smeared light between the two orbs, drawn behind them.
+  if (uBridge > 0.001 && uR2 > 0.002) {
+    vec2 ab = uC2 - uC1, ap = p - uC1;
+    float L = length(ab);
+    if (L > 0.001) {
+      vec2 dir = ab / L, nrm = vec2(-dir.y, dir.x);
+      float along = dot(ap, dir), perp = dot(ap, nrm);
+      float T = min(uR1, uR2) * 0.88;
+      float inside = (1. - smoothstep(T * 0.2, T * 1.05, abs(perp))) * smoothstep(-0.02, 0.1, along) * smoothstep(-0.02, 0.1, L - along);
+      float streak = 0.85 + 0.15 * noise(vec2(along * 3. - uTime * 0.2, perp / T * 9.));
+      vec3 bc = mix(uK1, uK4, 0.35 + 0.5 * abs(perp) / T);
+      outc = mix(outc, bc, inside * streak * uBridge * 0.9);
+    }
+  }
+
+  outc = mix(outc, echoCol, echo * 0.55);
+  outc = mix(outc, col, body);
+  return outc;
+}
+
+void main(){
+  vec2 frag = gl_FragCoord.xy;
+  vec2 p = (frag - 0.5 * uRes) / min(uRes.x, uRes.y);
+
+  // Glass filter: a refracting surface laid over the composition.
+  vec2 disp = vec2(0.); float mask = 0., sdf = -1.; vec3 nrm = vec3(0., 0., 1.);
+  float ca = cos(uGAng), sa = sin(uGAng);
+  if (uGType > 0) {
+    vec2 q = p - uGC;
+    vec2 qr = vec2(ca * q.x + sa * q.y, -sa * q.x + ca * q.y);
+    float Rg = uGSize;
+    if (uGCover == 0) mask = 1.;
+    else {
+      sdf = uGCover == 1 ? sdBox(qr, vec2(Rg * 0.5, Rg * 0.95), Rg * 0.1) : length(q) - Rg * 0.75;
+      mask = 1. - smoothstep(-0.002, 0.002, sdf);
+    }
+    vec2 g = vec2(0.);
+    if (uGType == 1) {            // ripple: concentric waves spreading from the glass center
+      float r = length(q) + 1e-4, F = uGFreq * 6.2831853;
+      float env = exp(-r / (Rg * 1.3));
+      float w = r * F - uGPhase;
+      g = q / r * (cos(w) * env - sin(w) * env / (F * Rg * 1.3));
+    } else if (uGType == 2) {     // reeds: fluted glass, each flute a small lens
+      float u = qr.x * uGFreq * 2. + uGPhase * 0.08;
+      float cell = fract(u) - 0.5;
+      g = vec2(ca, sa) * cell * 2.;
+    } else if (uGType == 3) {     // liquid: slow flowing surface
+      vec2 sp = p * uGFreq * 0.9, fl = vec2(uGPhase * 0.12, -uGPhase * 0.07);
+      float h0 = fbm(sp + fl), e = 0.04;
+      g = vec2(fbm(sp + fl + vec2(e, 0.)) - h0, fbm(sp + fl + vec2(0., e)) - h0) / e * 0.35;
+    } else {                      // lens: magnifying dome
+      float RR = uGCover == 2 ? Rg * 0.75 : Rg;
+      float t = clamp(length(q) / RR, 0., 1.);
+      g = -q / RR * (1. - t * t) * 1.6;
+    }
+    float k = mask * uGFade;
+    disp = g * uGRefr * k;
+    nrm = normalize(vec3(-g * uGRefr * 9. * k, 1.));
+    disp += (vec2(hash(frag * 1.31), hash(frag * 1.73 + 3.1)) - 0.5) * uGFrost * 0.05 * k;
+  }
+
+  vec3 col;
+  if (uGChroma > 0.001 && mask * uGFade > 0.001) {
+    col.r = scene(p + disp * (1. + uGChroma)).r;
+    col.g = scene(p + disp).g;
+    col.b = scene(p + disp * (1. - uGChroma)).b;
+  } else {
+    col = scene(p + disp);
+  }
+
+  if (uGType > 0) {
+    float k = mask * uGFade;
+    vec3 L = normalize(vec3(-0.45, 0.6, 0.65));
+    float spec = pow(max(dot(reflect(-L, nrm), vec3(0., 0., 1.)), 0.), 36.);
+    col += spec * uGHi * 0.9 * k;
+    col = mix(col, vec3(1.), 0.04 * uGHi * k + 0.06 * uGFrost * k);
+    if (uGCover > 0) {
+      float rim = exp(-pow(sdf / 0.0035, 2.));
+      col = mix(col, vec3(1.), rim * (0.35 + 0.45 * uGHi) * uGFade);
+      col *= 1. - 0.07 * exp(-pow((sdf + 0.012) / 0.01, 2.)) * uGFade;
+      col *= 1. - 0.05 * exp(-pow((sdf - 0.01) / 0.012, 2.)) * uGFade;
+    }
+  }
+
+  col += (hash(frag / uScale + fract(uTime * 7.) * 91.) - 0.5) * uGrain * 0.1;
+  gl_FragColor = vec4(clamp(col, 0., 1.), 1.);
+}`;
+  function sh(type, src) {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aLoc = gl.getAttribLocation(prog, "a");
+  gl.enableVertexAttribArray(aLoc);
+  gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+  const U = {};
+  for (const n of ["uRes", "uTime", "uPhase", "uScale", "uC1", "uC2", "uR1", "uR2", "uMerge", "uBridge", "uStretch", "uAmp", "uFreq", "uFall", "uDisp", "uBal", "uPulse", "uSoft", "uCore", "uGrain", "uK0", "uK1", "uK2", "uK3", "uK4", "uBg", "uGType", "uGCover", "uGC", "uGSize", "uGRefr", "uGFreq", "uGPhase", "uGChroma", "uGHi", "uGFrost", "uGAng", "uGFade"])
+    U[n] = gl.getUniformLocation(prog, n);
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+
+  function draw(P, t, W, H, scale) {
+    const breathe = 1 + 0.025 * (P.pulse / 100) * Math.sin(t * 0.9);
+    const r1 = (0.06 + P.size / 100 * 0.6) * breathe;
+    const r2 = r1 * P.sizeB / 100;
+    const a = P.angle * Math.PI / 180, half = P.sep / 100 * 0.7;
+    const stretch = 1 + Math.pow(P.stretch / 100, 2.5) * 30;
+    gl.viewport(0, 0, W, H);
+    gl.uniform2f(U.uRes, W, H);
+    gl.uniform1f(U.uTime, t);
+    gl.uniform1f(U.uPhase, -t * (0.2 + P.flow / 100 * 4));
+    gl.uniform1f(U.uScale, scale || 1);
+    gl.uniform2f(U.uC1, -Math.cos(a) * half, -Math.sin(a) * half);
+    gl.uniform2f(U.uC2, Math.cos(a) * half, Math.sin(a) * half);
+    gl.uniform1f(U.uR1, r1);
+    gl.uniform1f(U.uR2, r2);
+    gl.uniform1f(U.uMerge, P.merge / 100 * r1 * 1.4 * Math.min(1, P.sizeB / 100));
+    gl.uniform1f(U.uBridge, P.bridge / 100);
+    gl.uniform1f(U.uStretch, stretch);
+    gl.uniform1f(U.uAmp, P.rings / 100 * 0.2);
+    gl.uniform1f(U.uFreq, 1.5 + P.freq / 100 * 9);
+    gl.uniform1f(U.uFall, 0.03 + P.falloff / 100 * 1.1);
+    gl.uniform1f(U.uDisp, P.disp / 100 * 0.12);
+    gl.uniform1f(U.uBal, P.balance / 100);
+    gl.uniform1f(U.uPulse, P.pulse / 100);
+    gl.uniform1f(U.uSoft, 0.02 + P.soft / 100 * 0.8);
+    gl.uniform1f(U.uCore, P.core / 100);
+    gl.uniform1f(U.uGrain, P.grain / 100);
+    for (const k of ["k0", "k1", "k2", "k3", "k4"]) gl.uniform3fv(U["u" + k.toUpperCase()], rgb(P[k]));
+    gl.uniform3fv(U.uBg, rgb(P.bg));
+    const GT = { off: 0, ripple: 1, reeds: 2, liquid: 3, lens: 4 }, GC = { full: 0, pane: 1, circle: 2 };
+    gl.uniform1i(U.uGType, GT[P.gtype] || 0);
+    gl.uniform1i(U.uGCover, GC[P.gcover] || 0);
+    const gx = P.gsweep === "on" ? Math.sin(t * 0.45) * 0.6 * Math.max(1, W / H) : P.gx;
+    gl.uniform2f(U.uGC, gx, P.gsweep === "on" ? 0 : P.gy);
+    gl.uniform1f(U.uGSize, 0.1 + P.gsize / 100 * 0.6);
+    gl.uniform1f(U.uGRefr, P.grefr / 100 * 0.08);
+    gl.uniform1f(U.uGFreq, 1 + P.gfreq / 100 * 14);
+    gl.uniform1f(U.uGPhase, t * (0.3 + P.gflow / 100 * 6));
+    gl.uniform1f(U.uGChroma, P.gchroma / 100 * 0.6);
+    gl.uniform1f(U.uGHi, P.ghi / 100);
+    gl.uniform1f(U.uGFrost, P.gfrost / 100);
+    gl.uniform1f(U.uGAng, P.gang * Math.PI / 180);
+    gl.uniform1f(U.uGFade, glassFade);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // ---------- thumbnails ----------
+  function refreshThumbs() {
+    if (!cv.width) return;
+    document.querySelectorAll(".comp").forEach(b => {
+      const P = Object.assign({}, S, COMPS[b.dataset.comp]);
+      const tc = b.querySelector("canvas");
+      const tw = 240, th = Math.round(tw * 9 / 16);
+      const pw = cv.width, phh = cv.height;
+      draw(P, 2, tw, th, 1);
+      tc.width = 120; tc.height = 68;
+      tc.getContext("2d").drawImage(cv, 0, cv.height - th, tw, th, 0, 0, tc.width, tc.height);
+    });
+    draw(S, simT, cv.width, cv.height, dpr);
+  }
+
+  // ---------- layout ----------
+  let dpr = 1;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const pad = 28, bw = stage.clientWidth - pad * 2, bh = stage.clientHeight - pad * 2;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    dpr = Math.min(window.devicePixelRatio || 1, 2, 1800 / Math.max(w, h));
+    cv.style.width = Math.round(w) + "px"; cv.style.height = Math.round(h) + "px";
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    if (cv.width >= 240 && cv.height >= 135) refreshThumbs();
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe(stage);
+
+  // ---------- loop ----------
+  let clock = 0, simT = 3, last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    clock += dt;
+    stepTween();
+    if (glassFade < 1) { glassFade = Math.min(1, glassFade + dt / 0.5); dirty = true; }
+    if (playing) { simT += dt * (0.1 + S.speed / 100 * 1.8); stepCycle(); }
+    if (playing || dirty || tween) { draw(S, simT, cv.width, cv.height, dpr); dirty = false; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export ----------
+  const dlReady = window.claude && typeof window.claude.use === "function"
+    ? window.claude.use("downloads").catch(() => null)
+    : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+
+  $("exPng").onclick = () => {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const long = Math.min(3200, gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+    const W = aw >= ah ? long : Math.round(long * aw / ah), H = aw >= ah ? Math.round(long * ah / aw) : long;
+    const pw = cv.width, phh = cv.height;
+    cv.width = W; cv.height = H;
+    draw(S, simT, W, H, W / parseFloat(cv.style.width));
+    cv.toBlob(b => {
+      cv.width = pw; cv.height = phh; dirty = true;
+      b ? saveFile(`interference-${S.comp}.png`, b) : status("PNG export failed");
+    }, "image/png");
+  };
+
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!cv.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    const cycling = S.cycle === "on";
+    if (cycling) { tween = null; goTo(ORDER[0]); tween = null; for (const k of SHAPE) S[k] = COMPS[ORDER[0]][k]; cycleAt = clock; }
+    const secs = cycling ? ORDER.length * (S.hold + S.morph) : 8;
+    if (!playing) { playing = true; syncUI(); }
+    const rec = new MediaRecorder(cv.captureStream(60), { mimeType: mime, videoBitsPerSecond: 16e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false;
+      $("exVid").disabled = false; syncUI();
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(`interference-${cycling ? "cycle" : S.comp}-${Math.round(secs)}s.${ext}`, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    recording = true;
+    $("exVid").disabled = true; $("exVid").textContent = `Recording ${Math.round(secs)}s…`;
+    rec.start(250);
+    setTimeout(() => rec.stop(), secs * 1000);
+  };
+
+  // ---------- boot ----------
+  syncUI();
+  layout();
+  requestAnimationFrame(tick);
+})();
+</script>
