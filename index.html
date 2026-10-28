@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gray Experiments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root { --bg: #0a0a0b; --fg: #f0f0ee; --muted: #7b7d82; --line: #26272a; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.6 var(--mono); }
+main { max-width: 880px; margin: 0 auto; padding: 64px 16px 96px; }
+h1 { font-weight: 500; font-size: 14px; letter-spacing: .16em; margin: 0 0 6px; }
+.lede { color: var(--muted); margin: 0 0 48px; max-width: 60ch; }
+ol { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+li a { display: grid; grid-template-columns: 3ch minmax(0, 14rem) minmax(0, 1fr); gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
+li a:hover .name, li a:focus-visible .name { text-decoration: underline; text-underline-offset: 4px; }
+a:focus-visible { outline: 2px solid var(--fg); outline-offset: 4px; }
+.n { color: var(--muted); }
+.name { font-weight: 500; letter-spacing: .04em; }
+.desc { color: var(--muted); }
+.empty { color: var(--muted); padding: 18px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 640px) { li a { grid-template-columns: 3ch minmax(0, 1fr); } .desc { grid-column: 2; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>GRAY EXPERIMENTS</h1>
+  <p class="lede">Visual tools for Gray's art direction: the filter that turns noise into signal. Open one, play with the panel, export images or video.</p>
+  <ol id="list"></ol>
+</main>
+<script>
+// one entry per tool folder; added as each tool is pushed
+const TOOLS = [
+];
+const list = document.getElementById("list");
+if (!TOOLS.length) list.innerHTML = '<li class="empty">Tools are on their way.</li>';
+TOOLS.forEach(([dir, name, desc], i) => {
+  const li = document.createElement("li");
+  li.innerHTML = `<a href="${dir}/"><span class="n">${String(i + 1).padStart(2, "0")}</span><span class="name"></span><span class="desc"></span></a>`;
+  li.querySelector(".name").textContent = name; li.querySelector(".desc").textContent = desc;
+  list.appendChild(li);
+});
+</script>
+</body>
+</html>
