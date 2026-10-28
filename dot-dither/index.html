@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dot Dither</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, artwork stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 0;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sec { display: grid; gap: 18px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+
+.sl { display: grid; gap: 4px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; margin-top: -10.5px; }
+.track input::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 22px; height: 24px; line-height: 24px; text-align: center; font-size: 11px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+.ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--panel-muted); }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn:focus-visible, .seg button:focus-visible, .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sw { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.pal { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mini { font: 14px/1 var(--mono); width: 26px; height: 26px; border-radius: 50%; border: 1px dashed #55565b; background: transparent; color: var(--panel-muted); cursor: pointer; }
+.mini:hover { color: var(--panel-fg); border-color: var(--panel-fg); }
+.pal[data-off="true"] { opacity: .35; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; transition: background-color .2s; }
+.stage canvas { display: block; }
+.cap { position: absolute; left: 16px; bottom: 14px; right: 16px; font-size: 10px; letter-spacing: .06em; color: rgba(0,0,0,.45); mix-blend-mode: difference; filter: invert(1); pointer-events: none; }
+.drop { position: absolute; inset: 12px; border: 1.5px dashed var(--accent); border-radius: 12px; display: grid; place-items: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); background: rgba(75,59,255,.06); pointer-events: none; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(72vh, 118vw); order: -1; }
+  .panel { overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { .stage { transition: none; } }
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Treatment controls">
+    <div class="ph"><b>DOT DITHER</b><span id="srcName">Sample image</span></div>
+
+    <div class="sec">
+      <div class="btns">
+        <button class="btn" id="upload" type="button">Upload</button>
+        <button class="btn" id="reset" type="button">Reset</button>
+      </div>
+      <input type="file" id="file" accept="image/*,video/*" hidden>
+    </div>
+
+    <div class="sec" id="dotCtl"></div>
+    <div class="sec" id="imgCtl"></div>
+
+    <div class="sec">
+      <div class="row"><span class="lbl">Background</span><input type="color" class="sw" id="bg" aria-label="Background color"></div>
+      <div class="row"><span class="lbl">Dot color</span>
+        <div class="seg" role="group" aria-label="Dot color source">
+          <button type="button" id="cmImage" data-cm="image">Image</button>
+          <button type="button" id="cmPal" data-cm="palette">Palette</button>
+        </div>
+      </div>
+      <div class="pal" id="pal" aria-label="Brand palette"></div>
+      <div class="row"><span class="lbl">Shape</span>
+        <div class="seg" role="group" aria-label="Dot shape">
+          <button type="button" id="shC" data-sh="circle">Circle</button>
+          <button type="button" id="shS" data-sh="square">Square</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl">Motion</span>
+        <div class="seg" role="group" aria-label="Motion">
+          <button type="button" id="mvOff" data-mv="0">Off</button>
+          <button type="button" id="mvOn" data-mv="1">Breathe</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="btns">
+        <button class="btn fill" id="exSvg" type="button">SVG</button>
+        <button class="btn" id="exPng" type="button">PNG</button>
+      </div>
+      <button class="btn" id="exVid" type="button" hidden>Record video</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="cv" aria-label="Dot dither preview"></canvas>
+    <div class="cap" id="cap">Sample image. Drop, paste or upload your own image or video.</div>
+    <div class="drop" id="drop" hidden>Drop image or video</div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const DEF = {
+    res: 2, spacing: 3, size: 3, grain: 2, opacity: 4, blur: 7,
+    bg: "#eff0f2", colorMode: "image", shape: "circle", animate: false,
+    palette: ["#1f4fd6", "#13b26a", "#e01b2f", "#f5c518", "#f07a1a", "#2b1d14"]
+  };
+  const KEY = "dot-dither-settings-v1";
+  const clone = o => JSON.parse(JSON.stringify(o));
+  let S = clone(DEF);
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(clone(DEF), s); } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d"), stage = $("stage");
+  const FILTER_OK = typeof ctx.filter === "string";
+
+  // ---------- sliders ----------
+  const SLIDERS = [
+    ["res", "Resolution", "Grid pitch. Higher numbers give fewer, larger dots.", "dotCtl"],
+    ["spacing", "Spacing", "Gap between neighbouring dots.", "dotCtl"],
+    ["size", "Size", "How quickly dots grow to full size. Higher fills more of the grid.", "dotCtl"],
+    ["grain", "Grain", "Random size variation, stray dots and film noise.", "dotCtl"],
+    ["opacity", "Image opacity", "Opacity of the photo behind the dots. 1 hides it.", "imgCtl"],
+    ["blur", "Image blur", "Blur on the photo behind the dots.", "imgCtl"]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="1" max="8" step="1"><span class="bubble" aria-hidden="true"></span></div>
+      <div class="ends" aria-hidden="true"><span>1</span><span>8</span></div>`;
+    $(parent).appendChild(w);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncSlider(k); changed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k];
+    input.value = S[k];
+    bub.textContent = S[k];
+    bub.style.left = `calc(${(S[k] - 1) / 7} * (100% - 22px))`;
+  }
+
+  // ---------- style controls ----------
+  $("bg").addEventListener("input", e => { S.bg = e.target.value; changed(); });
+  document.querySelectorAll("[data-cm]").forEach(b => b.addEventListener("click", () => { S.colorMode = b.dataset.cm; changed(); }));
+  document.querySelectorAll("[data-sh]").forEach(b => b.addEventListener("click", () => { S.shape = b.dataset.sh; changed(); }));
+  document.querySelectorAll("[data-mv]").forEach(b => b.addEventListener("click", () => { S.animate = b.dataset.mv === "1"; changed(); }));
+
+  function buildPalette() {
+    const pal = $("pal");
+    pal.innerHTML = "";
+    S.palette.forEach((c, i) => {
+      const inp = document.createElement("input");
+      inp.type = "color"; inp.className = "sw"; inp.value = c;
+      inp.setAttribute("aria-label", `Palette color ${i + 1}`);
+      inp.addEventListener("input", () => { S.palette[i] = inp.value; changed(); });
+      pal.appendChild(inp);
+    });
+    const add = document.createElement("button");
+    add.type = "button"; add.className = "mini"; add.textContent = "+"; add.setAttribute("aria-label", "Add palette color");
+    add.onclick = () => { S.palette.push("#888888"); buildPalette(); changed(); };
+    pal.appendChild(add);
+    if (S.palette.length > 1) {
+      const rm = document.createElement("button");
+      rm.type = "button"; rm.className = "mini"; rm.textContent = "−"; rm.setAttribute("aria-label", "Remove last palette color");
+      rm.onclick = () => { S.palette.pop(); buildPalette(); changed(); };
+      pal.appendChild(rm);
+    }
+  }
+
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    $("bg").value = S.bg;
+    stage.style.backgroundColor = S.bg;
+    document.querySelectorAll("[data-cm]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.cm === S.colorMode)));
+    document.querySelectorAll("[data-sh]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.sh === S.shape)));
+    document.querySelectorAll("[data-mv]").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.mv === "1") === S.animate)));
+    $("pal").dataset.off = String(S.colorMode !== "palette");
+    $("exVid").hidden = !(isVideo || S.animate);
+  }
+
+  let dirty = true;
+  function changed() { syncUI(); persist(); dirty = true; }
+
+  $("reset").onclick = () => {
+    S = clone(DEF); buildPalette();
+    if (objURL) { URL.revokeObjectURL(objURL); objURL = null; }
+    setDefault();
+    status("Reset to default image and settings");
+  };
+
+  // ---------- source ----------
+  let src = null, srcW = 1, srcH = 1, isVideo = false, video = null, objURL = null;
+
+  function makeSample() {
+    const c = document.createElement("canvas");
+    c.width = 1200; c.height = 1350;
+    const x = c.getContext("2d");
+    x.fillStyle = "#eff0f2"; x.fillRect(0, 0, c.width, c.height);
+    const mix = (hex, t) => {
+      const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+      return `rgb(${Math.round(r + (255 - r) * t)},${Math.round(g + (255 - g) * t)},${Math.round(b + (255 - b) * t)})`;
+    };
+    const blobs = [
+      [0.30, 0.24, 0.21, "#1d55d6", "#0a2a86"],
+      [0.42, 0.40, 0.11, "#13a9c8", "#0a5f74"],
+      [0.48, 0.46, 0.17, "#14b56b", "#08613a"],
+      [0.52, 0.55, 0.10, "#5b3a1f", "#1f1006"],
+      [0.66, 0.52, 0.17, "#e2192e", "#760914"],
+      [0.58, 0.66, 0.10, "#f07a1a", "#9b3a05"],
+      [0.74, 0.76, 0.21, "#f6cf2a", "#c58405"]
+    ];
+    for (const [cx, cy, r, base, rim] of blobs) {
+      const X = cx * c.width, Y = cy * c.height, R = r * c.width;
+      x.save();
+      if (typeof x.filter === "string") x.filter = `blur(${R * 0.12}px)`;
+      x.fillStyle = "rgba(40,40,60,.12)";
+      x.beginPath(); x.ellipse(X + R * 0.08, Y + R * 0.9, R * 0.8, R * 0.18, 0, 0, Math.PI * 2); x.fill();
+      x.restore();
+      const g = x.createRadialGradient(X - R * 0.35, Y - R * 0.4, R * 0.05, X, Y, R);
+      g.addColorStop(0, mix(base, 0.55)); g.addColorStop(0.35, base); g.addColorStop(0.85, base); g.addColorStop(1, rim);
+      x.fillStyle = g;
+      x.beginPath(); x.arc(X, Y, R, 0, Math.PI * 2); x.fill();
+    }
+    return c;
+  }
+
+  const sample = makeSample();
+
+  function setSource(el, w, h, name, vid) {
+    if (video && video !== el) { video.pause(); video.removeAttribute("src"); video.load(); }
+    src = el; srcW = w; srcH = h; isVideo = !!vid; video = vid ? el : null;
+    $("srcName").textContent = name;
+    $("srcName").title = name;
+    $("cap").hidden = name !== "Sample image";
+    layout(); changed();
+  }
+
+  function loadFile(f) {
+    if (!f) return;
+    if (objURL) URL.revokeObjectURL(objURL);
+    objURL = URL.createObjectURL(f);
+    if (f.type.startsWith("video/")) {
+      const v = document.createElement("video");
+      v.muted = true; v.loop = true; v.playsInline = true; v.preload = "auto";
+      v.onloadeddata = () => { setSource(v, v.videoWidth, v.videoHeight, f.name, true); v.play().catch(() => {}); };
+      v.onerror = () => status("That video format can't be played in this browser. Try MP4 or WebM.");
+      v.src = objURL;
+    } else if (f.type.startsWith("image/")) {
+      const img = new Image();
+      img.onload = () => setSource(img, img.naturalWidth, img.naturalHeight, f.name, false);
+      img.onerror = () => status("That image couldn't be read. Try PNG, JPG or WebP.");
+      img.src = objURL;
+    } else {
+      status("Use an image or video file.");
+    }
+  }
+
+  $("upload").onclick = () => $("file").click();
+  $("file").onchange = e => { loadFile(e.target.files[0]); e.target.value = ""; };
+  let dragDepth = 0;
+  stage.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; $("drop").hidden = false; });
+  stage.addEventListener("dragover", e => e.preventDefault());
+  stage.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
+  stage.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; $("drop").hidden = true; loadFile(e.dataTransfer.files[0]); });
+  document.addEventListener("paste", e => {
+    const f = [...(e.clipboardData?.files || [])].find(f => /^(image|video)\//.test(f.type));
+    if (f) loadFile(f);
+  });
+
+  // ---------- rendering ----------
+  const mid = document.createElement("canvas"), mctx = mid.getContext("2d");
+  const smp = document.createElement("canvas"), sctx = smp.getContext("2d", { willReadFrequently: true });
+  const blr = document.createElement("canvas"), bctx = blr.getContext("2d");
+  const noise = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const x = c.getContext("2d"), d = x.createImageData(256, 256);
+    for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+    x.putImageData(d, 0, 0);
+    return c;
+  })();
+
+  const hexRGB = h => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+  const toHex = (r, g, b) => "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+  function rnd(i, j, k) {
+    let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(k, 1274126177)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+
+  function computeDots(W, H, t) {
+    const L = Math.sqrt(W * H);
+    const pitch = L * 0.012 * Math.pow(1.35, S.res - 1);
+    const cols = Math.ceil(W / pitch), rows = Math.ceil(H / pitch);
+    const x0 = (W - cols * pitch) / 2, y0 = (H - rows * pitch) / 2;
+
+    // Average the source into one pixel per cell (two steps for a clean box filter).
+    const m = 4;
+    mid.width = cols * m; mid.height = rows * m;
+    mctx.setTransform(m / pitch, 0, 0, m / pitch, -x0 * m / pitch, -y0 * m / pitch);
+    mctx.fillStyle = S.bg; mctx.fillRect(x0, y0, cols * pitch, rows * pitch);
+    mctx.imageSmoothingQuality = "high";
+    mctx.drawImage(src, 0, 0, W, H);
+    smp.width = cols; smp.height = rows;
+    sctx.imageSmoothingQuality = "high";
+    sctx.drawImage(mid, 0, 0, cols, rows);
+    const d = sctx.getImageData(0, 0, cols, rows).data;
+
+    const [br, bgc, bb] = hexRGB(S.bg);
+    const bgL = (0.2126 * br + 0.7152 * bgc + 0.0722 * bb) / 255;
+    const maxR = pitch / 2 * (1 - (S.spacing - 1) * 0.09);
+    const gamma = 2.4 / (0.4 + S.size * 0.45);
+    const g = (S.grain - 1) / 7;
+    const seed = S.animate ? Math.floor(t * 6) : 0;
+    const pal = S.colorMode === "palette" ? S.palette.map(hexRGB) : null;
+    const dots = [];
+
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const o = (j * cols + i) * 4;
+        let r = d[o], gg = d[o + 1], b = d[o + 2];
+        const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+        const sat = mx === 0 ? 0 : (mx - mn) / mx;
+        const lum = (0.2126 * r + 0.7152 * gg + 0.0722 * b) / 255;
+        const ink = Math.min(1, Math.max(sat, Math.abs(lum - bgL) * 1.4) * 1.15);
+
+        let rad = ink < 0.06 ? 0 : maxR * Math.pow(ink, gamma);
+        if (g > 0) {
+          rad *= 1 + (rnd(i, j, 1) - 0.5) * g * 0.9;
+          if (rnd(i, j, 2 + seed) < g * 0.22) rad = 0;
+          else if (rad < maxR * 0.2 && ink > 0.03 && rnd(i, j, 3 + seed) < g * 0.35) rad = maxR * (0.12 + rnd(i, j, 4) * 0.12);
+        }
+        if (S.animate) rad *= 1 + 0.22 * Math.sin(t * 1.6 - (i + j) * 0.35 + rnd(i, j, 9) * 2);
+        if (rad < 0.5) continue;
+
+        if (pal) {
+          let best = 0, bd = Infinity;
+          for (let p = 0; p < pal.length; p++) {
+            const dr = r - pal[p][0], dg = gg - pal[p][1], db = b - pal[p][2];
+            const dist = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+            if (dist < bd) { bd = dist; best = p; }
+          }
+          [r, gg, b] = pal[best];
+        }
+        dots.push(x0 + (i + 0.5) * pitch, y0 + (j + 0.5) * pitch, rad, r, gg, b);
+      }
+    }
+    return dots;
+  }
+
+  function drawImageLayer(c, W, H) {
+    if (S.opacity <= 1) return;
+    const L = Math.sqrt(W * H);
+    const blurPx = (S.blur - 1) / 7 * 0.06 * L;
+    const k = Math.max(1, FILTER_OK ? blurPx / 3 : blurPx / 1.5);
+    blr.width = Math.max(1, Math.ceil(W / k)); blr.height = Math.max(1, Math.ceil(H / k));
+    bctx.clearRect(0, 0, blr.width, blr.height);
+    bctx.filter = FILTER_OK && blurPx / k > 0.5 ? `blur(${blurPx / k}px)` : "none";
+    bctx.drawImage(src, 0, 0, blr.width, blr.height);
+    bctx.filter = "none";
+    c.save();
+    c.globalAlpha = Math.pow((S.opacity - 1) / 7, 0.6);
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high";
+    c.drawImage(blr, 0, 0, W, H);
+    c.restore();
+  }
+
+  function drawGrain(c, W, H, t) {
+    const g = (S.grain - 1) / 7;
+    if (g <= 0) return;
+    c.save();
+    c.globalAlpha = g * 0.3;
+    c.globalCompositeOperation = "overlay";
+    const pat = c.createPattern(noise, "repeat");
+    const ox = S.animate ? Math.floor(rnd(Math.floor(t * 12), 7, 7) * 256) : 0;
+    c.translate(-ox, -ox);
+    c.fillStyle = pat;
+    c.fillRect(ox, ox, W, H);
+    c.restore();
+  }
+
+  function drawDots(c, dots) {
+    const sq = S.shape === "square";
+    for (let n = 0; n < dots.length; n += 6) {
+      const x = dots[n], y = dots[n + 1], r = dots[n + 2];
+      c.fillStyle = `rgb(${dots[n + 3]},${dots[n + 4]},${dots[n + 5]})`;
+      if (sq) { c.fillRect(x - r, y - r, r * 2, r * 2); }
+      else { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+    }
+  }
+
+  function renderTo(c, W, H, t) {
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1; c.globalCompositeOperation = "source-over";
+    c.fillStyle = S.bg; c.fillRect(0, 0, W, H);
+    if (!src) return;
+    drawImageLayer(c, W, H);
+    drawGrain(c, W, H, t);
+    drawDots(c, computeDots(W, H, t));
+  }
+
+  function layout() {
+    const pad = 24;
+    const bw = stage.clientWidth - pad * 2, bh = stage.clientHeight - pad * 2;
+    if (bw <= 0 || bh <= 0) return;
+    const a = srcW / srcH;
+    let w = bw, h = bw / a;
+    if (h > bh) { h = bh; w = bh * a; }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cap = 2000 / Math.max(w, h);
+    const sc = Math.min(dpr, cap);
+    cv.style.width = Math.round(w) + "px";
+    cv.style.height = Math.round(h) + "px";
+    cv.width = Math.max(1, Math.round(w * sc));
+    cv.height = Math.max(1, Math.round(h * sc));
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe(stage);
+
+  function tick(now) {
+    if (src && (dirty || isVideo || S.animate)) {
+      renderTo(ctx, cv.width, cv.height, now / 1000);
+      dirty = false;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export ----------
+  const dlReady = window.claude && typeof window.claude.use === "function"
+    ? window.claude.use("downloads").catch(() => null)
+    : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+
+  function exportSize(long) {
+    const s = long / Math.max(srcW, srcH);
+    return [Math.round(srcW * s), Math.round(srcH * s)];
+  }
+  const baseName = () => ($("srcName").textContent.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "-").toLowerCase() || "image") + "-dots";
+  const nowT = () => performance.now() / 1000;
+
+  $("exPng").onclick = () => {
+    if (!src) return;
+    const [W, H] = exportSize(3000);
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    renderTo(c.getContext("2d"), W, H, nowT());
+    c.toBlob(b => b ? saveFile(baseName() + ".png", b) : status("PNG export failed"), "image/png");
+  };
+
+  $("exSvg").onclick = () => {
+    if (!src) return;
+    const [W, H] = exportSize(1600);
+    const t = nowT();
+    let img = "";
+    if (S.opacity > 1) {
+      const [iw, ih] = exportSize(800);
+      const c = document.createElement("canvas"); c.width = iw; c.height = ih;
+      drawImageLayer(c.getContext("2d"), iw, ih);
+      img = `<image href="${c.toDataURL("image/png")}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none"/>`;
+    }
+    const dots = computeDots(W, H, t), sq = S.shape === "square", parts = [];
+    for (let n = 0; n < dots.length; n += 6) {
+      const x = dots[n], y = dots[n + 1], r = dots[n + 2], f = toHex(dots[n + 3], dots[n + 4], dots[n + 5]);
+      parts.push(sq
+        ? `<rect x="${(x - r).toFixed(1)}" y="${(y - r).toFixed(1)}" width="${(2 * r).toFixed(1)}" height="${(2 * r).toFixed(1)}" fill="${f}"/>`
+        : `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${f}"/>`);
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<rect width="${W}" height="${H}" fill="${S.bg}"/>
+${img}
+<g id="dots">
+${parts.join("\n")}
+</g>
+</svg>`;
+    saveFile(baseName() + ".svg", new Blob([svg], { type: "image/svg+xml" }));
+  };
+
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording || !src) return;
+    if (!cv.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    const rec = new MediaRecorder(cv.captureStream(30), { mimeType: mime, videoBitsPerSecond: 12e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false;
+      $("exVid").disabled = false; $("exVid").textContent = "Record video";
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(baseName() + "." + ext, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    const secs = isVideo ? Math.min(isFinite(video.duration) ? video.duration : 6, 30) : 6;
+    if (isVideo) video.currentTime = 0;
+    recording = true;
+    $("exVid").disabled = true; $("exVid").textContent = `Recording ${Math.round(secs)}s…`;
+    rec.start(250);
+    setTimeout(() => rec.stop(), secs * 1000);
+  };
+
+  // the default picture ships next to this page; the drawn sample is the fallback if it can't load
+  const photo = new Image();
+  let photoOk = false;
+  function setDefault() {
+    if (photoOk) setSource(photo, photo.naturalWidth, photo.naturalHeight, "Sample image", false);
+    else setSource(sample, sample.width, sample.height, "Sample image", false);
+  }
+  photo.onload = () => { photoOk = true; if (src === sample) setDefault(); };
+  photo.src = "default.jpg";
+
+  // ---------- boot ----------
+  buildPalette();
+  syncUI();
+  setDefault();
+  requestAnimationFrame(tick);
+})();
+</script>
