@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gray Signal Forms</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, paper stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 27px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 18px; }
+.swc { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .04em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #000; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #e6e6e6; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+label.btn { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Particle form controls">
+    <div class="ph"><b>GRAY SIGNAL FORMS</b><span id="shapeName">Sphere</span></div>
+
+    <div class="sec">
+      <span class="sub">Form</span>
+      <div class="chips" role="group" aria-label="Form" id="shapeChips"></div>
+      <p class="hint">Noise resolves into structure: a fuzzy cloud becomes a clean shell, then the particles gather into seams and edges.</p>
+    </div>
+
+    <div class="sec" id="upCtl">
+      <span class="sub">Your own form</span>
+      <div class="btns">
+        <label class="btn" for="upImg">Image…</label>
+        <label class="btn" for="upObj">3D model…</label>
+      </div>
+      <input type="file" id="upImg" accept="image/*" hidden>
+      <input type="file" id="upObj" accept=".obj,.stl" hidden>
+      <p class="hint" id="upHint">PNG/JPG, or an .obj/.stl model. You can also drop a file on the image.</p>
+      <div class="row" id="invRow" hidden><span class="lbl">Subject</span>
+        <div class="seg" role="group" aria-label="Image subject">
+          <button type="button" data-inv="off">Light</button>
+          <button type="button" data-inv="on">Dark</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" id="formCtl">
+      <span class="sub">Resolve</span>
+      <div class="row"><span class="lbl">Layout</span>
+        <div class="seg" role="group" aria-label="Layout">
+          <button type="button" data-layout="1">Single</button>
+          <button type="button" data-layout="2">2×2</button>
+          <button type="button" data-layout="3">3×3</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl">Resolve</span>
+        <div class="seg" role="group" aria-label="Resolve motion">
+          <button type="button" data-cycle="on">Animate</button>
+          <button type="button" data-cycle="off">Hold</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" id="lookCtl">
+      <span class="sub">Particles</span>
+      <div class="chips" role="group" aria-label="Palette" id="palChips"></div>
+      <div class="sws">
+        <label class="swc"><input type="color" class="sw" id="dotc">Dots</label>
+        <label class="swc"><input type="color" class="sw" id="bgc">Ground</label>
+      </div>
+    </div>
+
+    <div class="sec" id="camCtl">
+      <span class="sub">Motion</span>
+      <p class="hint">Drag the image to turn the form.</p>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="4:5">4:5</button>
+          <button type="button" data-ar="16:9">16:9</button>
+          <button type="button" data-ar="9:16">9:16</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG 2×</button>
+        <button class="btn" id="exVid" type="button">Record 8s</button>
+      </div>
+      <div class="btns">
+        <button class="btn quiet" id="reroll" type="button">New seams</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="out" aria-label="Particle form preview"></canvas>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!window.THREE) { $("stage").innerHTML = '<div class="err">The 3D library couldn\'t load. Check your connection and reload.</div>'; return; }
+  const T = THREE;
+
+  const SHAPES = { sphere: "Sphere", cube: "Cube", shard: "Shard", torus: "Ring" };
+  const PALS = {
+    ink:   { name: "Ink",   dot: "#f2f2ee", bg: "#050505" },
+    gray:  { name: "Gray",  dot: "#c8f5b4", bg: "#0f1311" },
+    paper: { name: "Paper", dot: "#161616", bg: "#efeee9" }
+  };
+  const DEF = { imgInvert: "off", imgDepth: 40, shape: "sphere", layout: "1", cycle: "on", resolve: 70, count: 55, size: 35, bright: 50, seams: 55, life: 50, wobble: 40, zoom: 50, speed: 30, pal: "ink", dotc: "#f2f2ee", bgc: "#050505", ar: "1:1", seed: 11 };
+  const KEY = "gray-forms-v2";
+  let S = Object.assign({}, DEF);
+  try { const v = JSON.parse(localStorage.getItem(KEY) || "null"); if (v) S = Object.assign({}, DEF, v); } catch (e) {}
+  if (S.shape === "custom") S.shape = "sphere";
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  // ---------- panel ----------
+  const SL = [
+    ["resolve", "Resolve", "Noise (0) to structure (100). In a grid, the last cell.", "formCtl", "rebuildNone"],
+    ["seams", "Seams", "How many particles gather on seams and edges.", "formCtl", "rebuildNone"],
+    ["imgDepth", "Relief", "How much bright areas of the image rise forward.", "upCtl", "rebuild"],
+    ["life", "Flow", "How fast particles stream along the seams.", "formCtl", "rebuildNone"],
+    ["count", "Particles", "Number of particles.", "lookCtl", "rebuild"],
+    ["size", "Dot size", "Size of each particle.", "lookCtl", "rebuildNone"],
+    ["bright", "Brightness", "How strongly particles build up.", "lookCtl", "rebuildNone"],
+    ["wobble", "Drift", "How much the particles shimmer.", "camCtl", "rebuildNone"],
+    ["zoom", "Zoom", "How large the form is in frame.", "camCtl", "rebuildNone"],
+    ["speed", "Speed", "How fast it turns and resolves.", "camCtl", "rebuildNone"]
+  ];
+  const sEl = {};
+  for (const [k, n, tip, parent, act] of SL) {
+    const w = document.createElement("div"); w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${n}</label><div class="track"><input type="range" id="s-${k}" min="0" max="100"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent); host.insertBefore(w, parent === "upCtl" ? null : host.querySelector(".hint") || null);
+    if (k === "imgDepth") { w.id = "depthRow"; w.hidden = true; }
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sEl[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncS(k); save(); if (act === "rebuild") rebuild(); dirty = true; });
+  }
+  const syncS = k => { const { input, bub } = sEl[k]; input.value = S[k]; bub.textContent = S[k]; bub.style.left = `calc(${S[k] / 100} * (100% - 24px))`; };
+  for (const [id, name] of Object.entries(SHAPES)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.shape = id; b.textContent = name;
+    b.onclick = () => { S.shape = id; save(); syncUI(); rebuild(); }; $("shapeChips").appendChild(b);
+  }
+  $("shapeChips").style.gridTemplateColumns = "repeat(2,1fr)";
+  for (const [id, p] of Object.entries(PALS)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.pal = id;
+    b.innerHTML = `<i style="background:${p.bg};box-shadow:0 0 0 1px #3a3b3f"></i>${p.name}`;
+    b.onclick = () => { S.pal = id; S.dotc = p.dot; S.bgc = p.bg; save(); syncUI(); dirty = true; }; $("palChips").appendChild(b);
+  }
+  $("dotc").addEventListener("input", e => { S.dotc = e.target.value; S.pal = "custom"; save(); syncUI(); dirty = true; });
+  $("bgc").addEventListener("input", e => { S.bgc = e.target.value; S.pal = "custom"; save(); syncUI(); dirty = true; });
+  document.querySelectorAll("[data-inv]").forEach(b => b.onclick = () => { S.imgInvert = b.dataset.inv; save(); syncUI(); rebuild(); });
+  document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = b.dataset.layout; save(); syncUI(); dirty = true; });
+  document.querySelectorAll("[data-cycle]").forEach(b => b.onclick = () => { S.cycle = b.dataset.cycle; save(); syncUI(); dirty = true; });
+  document.querySelectorAll("[data-ar]").forEach(b => b.onclick = () => { S.ar = b.dataset.ar; save(); syncUI(); layout(); });
+  $("reroll").onclick = () => { S.seed = Math.floor(Math.random() * 1e5); save(); rebuild(); };
+  $("reset").onclick = () => { const sh = S.shape; S = Object.assign({}, DEF, { shape: sh }); save(); syncUI(); rebuild(); };
+  function syncUI() {
+    for (const k in sEl) syncS(k);
+    const press = (a, v) => document.querySelectorAll(`[data-${a}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[a] === v)));
+    press("shape", S.shape); press("inv", S.imgInvert);
+    const isImg = S.shape === "custom" && custom && custom.type === "image"; $("invRow").hidden = !isImg; $("depthRow").hidden = !isImg; press("pal", S.pal); press("layout", S.layout); press("cycle", S.cycle); press("ar", S.ar);
+    $("dotc").value = S.dotc; $("bgc").value = S.bgc; $("shapeName").textContent = S.shape === "custom" ? (custom ? custom.name : "") : SHAPES[S.shape];
+  }
+
+  // ---------- particle data ----------
+  // each particle has three homes: a fuzzy volume spot, a surface spot and a place on a seam.
+  // seams live on the GPU as curves that bend over time; seam particles stream along them.
+  let seed = 1;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2832 * v); };
+  const V = T.Vector3, V4 = T.Vector4;
+  const MAXC = 40;
+
+  // curve table: 4 vec4 per curve, meaning depends on the kind (see seamPoint in the shader)
+  // kind 0 sphere arcs, kind 1 straight edges, kind 2 torus loops
+  function sphereForm() {
+    const C = [];
+    const n = 4 + Math.floor(rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const a = new V(gauss(), gauss(), gauss()).normalize(), tmp = Math.abs(a.y) < 0.9 ? new V(0, 1, 0) : new V(1, 0, 0);
+      const u = new V().crossVectors(a, tmp).normalize(), w = new V().crossVectors(a, u);
+      const span = k < 2 ? 1 : 0.25 + rnd() * 0.5;
+      C.push([new V4(a.x, a.y, a.z, (rnd() - 0.5) * 1.0), new V4(u.x, u.y, u.z, rnd() * 6.2832), new V4(w.x, w.y, w.z, span), new V4(rnd() * 6, rnd() * 6, rnd() * 6, span >= 1 ? 1 : 0)]);
+    }
+    return { kind: 0, C, len: c => c[2].w, surface: () => new V(gauss(), gauss(), gauss()).normalize() };
+  }
+  function polyForm(geom) {
+    geom = geom.index ? geom.toNonIndexed() : geom;
+    const p = geom.attributes.position, tris = [], cum = []; let tot = 0;
+    for (let i = 0; i < p.count; i += 3) {
+      const a = new V().fromBufferAttribute(p, i), b = new V().fromBufferAttribute(p, i + 1), c = new V().fromBufferAttribute(p, i + 2);
+      tot += new V().subVectors(b, a).cross(new V().subVectors(c, a)).length() / 2; tris.push([a, b, c]); cum.push(tot);
+    }
+    const ep = new T.EdgesGeometry(geom, 15).attributes.position, C = [];
+    for (let i = 0; i < ep.count && C.length < MAXC; i += 2) {
+      const a = new V().fromBufferAttribute(ep, i), b = new V().fromBufferAttribute(ep, i + 1);
+      C.push([new V4(a.x, a.y, a.z, rnd() * 6), new V4(b.x, b.y, b.z, a.distanceTo(b)), new V4(rnd() * 6, rnd() * 6, rnd() * 6, 0), new V4(0, 0, 0, 1)]);
+    }
+    const pick = () => { let lo = 0, hi = cum.length - 1, x = rnd() * tot; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < x) lo = m + 1; else hi = m; } return tris[lo]; };
+    return { kind: 1, C, len: c => c[1].w, surface() { const [a, b, c] = pick(); let u = rnd(), v = rnd(); if (u + v > 1) { u = 1 - u; v = 1 - v; } return a.clone().addScaledVector(new V().subVectors(b, a), u).addScaledVector(new V().subVectors(c, a), v); } };
+  }
+  function torusForm() {
+    const R = 0.78, r = 0.3, C = [];
+    for (let k = 0; k < 5; k++) { const along = k < 2; C.push([new V4(along ? 1 : 0, rnd() * 6.28, rnd() * 6, 0), new V4(), new V4(rnd() * 6, rnd() * 6, rnd() * 6, 0), new V4(0, 0, 0, 1)]); }
+    return { kind: 2, C, len: c => c[0].x ? 4.9 : 1.9, surface() { let u, v; do { u = rnd() * 6.28; v = rnd() * 6.28; } while (rnd() > (R + r * Math.cos(v)) / (R + r)); return new V((R + r * Math.cos(v)) * Math.cos(u), r * Math.sin(v), (R + r * Math.cos(v)) * Math.sin(u)); } };
+  }
+
+  const renderer = new T.WebGLRenderer({ canvas: $("out"), antialias: false, preserveDrawingBuffer: true });
+  renderer.autoClear = false;
+  const scene = new T.Scene(), camera = new T.PerspectiveCamera(28, 1, 0.1, 50);
+  const arr = () => Array.from({ length: MAXC }, () => new V4());
+  const mat = new T.ShaderMaterial({
+    uniforms: {
+      uResolve: { value: 0.7 }, uSeams: { value: 0.55 }, uTime: { value: 0 }, uSize: { value: 1.5 }, uAlpha: { value: 0.5 }, uWobble: { value: 0.4 }, uColor: { value: new T.Color() },
+      uLife: { value: 0.5 }, uFlat: { value: 0 }, uKind: { value: 0 }, uC0: { value: arr() }, uC1: { value: arr() }, uC2: { value: arr() }, uC3: { value: arr() }
+    },
+    vertexShader: `
+      #define MAXC ${MAXC}
+      attribute vec3 aSurf, aOff, aSegA, aSegB; attribute vec4 aRand, aSeam;
+      uniform float uResolve, uSeams, uTime, uSize, uWobble, uLife, uFlat; uniform int uKind;
+      uniform vec4 uC0[MAXC], uC1[MAXC], uC2[MAXC], uC3[MAXC];
+      varying float vFade;
+      vec3 torusPt(float u, float v){ return vec3((.78 + .3 * cos(v)) * cos(u), .3 * sin(v), (.78 + .3 * cos(v)) * sin(u)); }
+      // a point on curve i at s in 0..1; every curve slowly bends with time
+      vec3 seamPoint(int i, float s, float tm){
+        vec4 c0 = uC0[i], c1 = uC1[i], c2 = uC2[i];
+        if (uKind == 0) {
+          float th = c1.w + s * c2.w * 6.2832, lat = c0.w + .12 * sin(tm * .23 + c2.x);
+          vec3 p = (c1.xyz * cos(th) + c2.xyz * sin(th)) * cos(lat) + c0.xyz * sin(lat);
+          p += .09 * vec3(sin(th * 3. + c2.x + tm * .41), sin(th * 5. + c2.y - tm * .33), sin(th * 2. + c2.z + tm * .37));
+          return normalize(p);
+        } else if (uKind == 1) {
+          vec3 p = mix(c0.xyz, c1.xyz, s);
+          float env = sin(s * 3.1416);
+          p += env * .07 * vec3(sin(s * 6.3 + c0.w + tm * .5), sin(s * 4.1 + c2.x - tm * .37), sin(s * 5.3 + c2.y + tm * .43));
+          return p * (1. + env * .03 * sin(tm * .6 + c2.z));
+        }
+        float a = s * 6.2832;
+        return c0.x > .5 ? torusPt(a, c0.y + .35 * sin(a * 3. + c0.z + tm * .45)) : torusPt(c0.y + .2 * sin(a * 2. + c0.z + tm * .4), a);
+      }
+      void main(){
+        float t = uResolve, tm = uTime;
+        // breathing surface
+        vec3 n = uFlat > .5 ? vec3(0., 0., 1.) : normalize(aSurf);
+        vec3 surf = aSurf + n * uWobble * .018 * (sin(dot(aSurf, vec3(2.3, 1.7, 2.9)) + tm * .9) + sin(dot(aSurf, vec3(-3.1, 2.2, .7)) - tm * .7));
+        float a = smoothstep(.05 + aRand.x * .15, .45 + aRand.x * .15, t);
+        vec3 p = mix(position, surf, a);
+        // where this particle sits on its seam, streaming along it
+        int ci = int(aSeam.x);
+        vec3 sp; float endFade = 1.;
+        if (uKind == 3) {
+          // your own form: each particle carries its own short seam segment
+          float ph = fract(sin(dot(aSegA, vec3(12.9898, 78.233, 37.719))) * 43758.5) * 6.2832;
+          if (aSeam.x >= 100.) {
+            float pulse = 1. + .35 * sin(tm * 1.7 + ph);
+            sp = aSegA + aOff * (aSeam.w < .4 ? .09 : .045) * pulse;
+          } else {
+            vec3 d = aSegB - aSegA; float L = max(length(d), .02);
+            float s = fract(aSeam.y + tm * uLife * .03 * (.5 + aSeam.z) / L), env = sin(s * 3.1416);
+            sp = mix(aSegA, aSegB, s) + env * min(.06, L * .12) * vec3(sin(s * 6.3 + ph + tm * .5), sin(s * 4.1 + ph * 2. - tm * .37), sin(s * 5.3 + ph * 3. + tm * .43));
+            float th = (.01 + .026 * pow(.5 + .5 * sin(s * 12.566 * min(1., L) + ph + tm * .6), 2.)) * (aSeam.w < .3 ? 2.6 : 1.);
+            sp += aOff * th * (uFlat > .5 ? vec3(1., 1., .4) : vec3(1.));
+            endFade = uFlat > .5 ? smoothstep(0., .25, s) * smoothstep(1., .75, s) : 1.;
+          }
+        } else if (aSeam.x >= 100.) {
+          // knots: pulsing clusters where threads begin
+          int k = int(aSeam.x) - 100;
+          vec3 c = seamPoint(k, 0., tm);
+          float pulse = 1. + .35 * sin(tm * 1.7 + float(k) * 2.1);
+          sp = c * (1. + .02 * pulse) + aOff * (aSeam.w < .4 ? .11 : .055) * pulse;
+        } else {
+          float len = max(.2, uC3[ci].w > .5 ? 1.5 : 1.);
+          float s = fract(aSeam.y + tm * uLife * .05 * (.5 + aSeam.z) / len);
+          sp = seamPoint(ci, s, tm);
+          // seams swell and thin along their length; a share of particles spreads wider as a soft halo
+          float th = .016 + .04 * pow(.5 + .5 * sin(s * 12.566 + uC2[ci].x + tm * .6), 2.);
+          th *= aSeam.w < .3 ? 2.8 : 1.;
+          sp += aOff * th;
+          if (uKind == 0) sp = normalize(sp) * (1. + th * .4);
+          if (uC3[ci].w < .5) endFade = smoothstep(0., .14, s) * smoothstep(1., .82, s);
+        }
+        float onSeam = step(aRand.w, uSeams);
+        float b = onSeam * smoothstep(.4 + aRand.x * .3, .75 + aRand.x * .25, t);
+        p = mix(p, sp, b);
+        float amp = uWobble * (.035 * (1. - a) + .006 * (1. - b));
+        p += amp * vec3(sin(tm * 1.3 + aRand.y * 40.), cos(tm * 1.1 + aRand.y * 23.), sin(tm * .9 + aRand.z * 57.));
+        vFade = mix(1., .4, (1. - onSeam) * smoothstep(.5, 1., t)) * mix(1., endFade, b);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
+        gl_PointSize = uSize * (.75 + aRand.z * .5);
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uAlpha; varying float vFade;
+      void main(){ vec2 d = gl_PointCoord - .5; if (dot(d, d) > .25) discard; gl_FragColor = vec4(uColor, uAlpha * vFade); }`,
+    transparent: true, depthTest: false, depthWrite: false, blending: T.AdditiveBlending
+  });
+  let points = null;
+  // ---------- your own forms: images and 3D models ----------
+  // both become kind 3: seams are stored per particle as short segments (aSegA -> aSegB)
+  let custom = null; // { type: "image"|"mesh", name, build() }
+  function cdf(weights) { const c = new Float32Array(weights.length); let t = 0; for (let i = 0; i < weights.length; i++) { t += weights[i]; c[i] = t; } return { c, t }; }
+  function drawFrom({ c, t }) { let lo = 0, hi = c.length - 1, x = rnd() * t; while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < x) lo = m + 1; else hi = m; } return lo; }
+
+  function imageForm(img) {
+    const M = 320, sc = Math.min(1, M / Math.max(img.width, img.height));
+    const w = Math.max(2, Math.round(img.width * sc)), h = Math.max(2, Math.round(img.height * sc));
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const x = cv.getContext("2d", { willReadFrequently: true }); x.fillStyle = S.imgInvert === "on" ? "#fff" : "#000"; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
+    const px = x.getImageData(0, 0, w, h).data, L = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) { const l = (0.2126 * px[i * 4] + 0.7152 * px[i * 4 + 1] + 0.0722 * px[i * 4 + 2]) / 255; L[i] = S.imgInvert === "on" ? 1 - l : l; }
+    const G = new Float32Array(w * h), GX = new Float32Array(w * h), GY = new Float32Array(w * h);
+    const at = (i, j) => L[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))];
+    let gmax = 1e-6;
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const gx = at(i + 1, j - 1) + 2 * at(i + 1, j) + at(i + 1, j + 1) - at(i - 1, j - 1) - 2 * at(i - 1, j) - at(i - 1, j + 1);
+      const gy = at(i - 1, j + 1) + 2 * at(i, j + 1) + at(i + 1, j + 1) - at(i - 1, j - 1) - 2 * at(i, j - 1) - at(i + 1, j - 1);
+      const k = j * w + i; GX[k] = gx; GY[k] = gy; G[k] = Math.hypot(gx, gy); gmax = Math.max(gmax, G[k]);
+    }
+    const sx = w / Math.max(w, h) * 1.15, sy = h / Math.max(w, h) * 1.15, depth = S.imgDepth / 100 * 0.6;
+    const surfC = cdf(Array.from(L, l => Math.pow(l, 1.3) + 0.004));
+    const edgeC = cdf(Array.from(G, g => { const q = g / gmax; return q > 0.12 ? q * q : 0; }));
+    const pos = (k, jx = rnd(), jy = rnd()) => { const i = k % w, j = (k / w) | 0; return new V(((i + jx) / w - 0.5) * 2 * sx, -((j + jy) / h - 0.5) * 2 * sy, (L[k] - 0.5) * depth); };
+    const knotsAt = []; for (let n = 0; n < 7; n++) knotsAt.push(pos(drawFrom(edgeC), 0.5, 0.5));
+    return {
+      flat: true,
+      surface: () => pos(drawFrom(surfC)),
+      volume(s) { return new V(s.x * (0.75 + 0.25 * rnd()) + gauss() * 0.16, s.y * (0.75 + 0.25 * rnd()) + gauss() * 0.16, gauss() * 0.32); },
+      knot: () => knotsAt[Math.floor(rnd() * knotsAt.length)],
+      seg() {
+        const k = drawFrom(edgeC), p = pos(k), g = Math.hypot(GX[k], GY[k]) || 1;
+        // edge runs perpendicular to the brightness gradient (y flipped into scene space)
+        const tx = -GY[k] / g, ty = -GX[k] / g, len = 0.02 + rnd() * 0.04;
+        return [new V(p.x - tx * len, p.y - ty * len, p.z), new V(p.x + tx * len, p.y + ty * len, p.z)];
+      }
+    };
+  }
+
+  function meshForm(geom) {
+    geom = geom.index ? geom.toNonIndexed() : geom;
+    geom.computeBoundingBox();
+    const bb = geom.boundingBox, c = bb.getCenter(new V()), size = bb.getSize(new V()), sc = 2.0 / Math.max(size.x, size.y, size.z, 1e-6);
+    geom.translate(-c.x, -c.y, -c.z); geom.scale(sc, sc, sc);
+    const p = geom.attributes.position, tris = [], area = [];
+    for (let i = 0; i < p.count; i += 3) {
+      const a = new V().fromBufferAttribute(p, i), b = new V().fromBufferAttribute(p, i + 1), d = new V().fromBufferAttribute(p, i + 2);
+      tris.push([a, b, d]); area.push(new V().subVectors(b, a).cross(new V().subVectors(d, a)).length() / 2);
+    }
+    const triC = cdf(area);
+    let ep = new T.EdgesGeometry(geom, 30).attributes.position;
+    if (ep.count < 12) ep = new T.EdgesGeometry(geom, 8).attributes.position;
+    const edges = [], elen = [];
+    for (let i = 0; i < ep.count; i += 2) { const a = new V().fromBufferAttribute(ep, i), b = new V().fromBufferAttribute(ep, i + 1); edges.push([a, b]); elen.push(a.distanceTo(b)); }
+    if (!edges.length) for (let i = 0; i < Math.min(tris.length, 3000); i++) { const [a, b] = tris[Math.floor(rnd() * tris.length)]; edges.push([a, b]); elen.push(a.distanceTo(b)); }
+    const edgeC = cdf(elen);
+    const knotsAt = []; for (let n = 0; n < 8; n++) knotsAt.push(edges[drawFrom(edgeC)][rnd() < 0.5 ? 0 : 1]);
+    return {
+      flat: false,
+      surface() { const [a, b, d] = tris[drawFrom(triC)]; let u = rnd(), v = rnd(); if (u + v > 1) { u = 1 - u; v = 1 - v; } return a.clone().addScaledVector(new V().subVectors(b, a), u).addScaledVector(new V().subVectors(d, a), v); },
+      volume(s) { const k = Math.cbrt(rnd()); return s.clone().multiplyScalar(0.3 + 0.75 * k).add(new V(gauss(), gauss(), gauss()).multiplyScalar(0.1)); },
+      knot: () => knotsAt[Math.floor(rnd() * knotsAt.length)],
+      seg: () => edges[drawFrom(edgeC)]
+    };
+  }
+
+  function parseOBJ(text) {
+    const vs = [], out = [];
+    for (const line of text.split(/\r?\n/)) {
+      if (line.startsWith("v ")) { const q = line.trim().split(/\s+/); vs.push(+q[1], +q[2], +q[3]); }
+      else if (line.startsWith("f ")) {
+        const q = line.trim().split(/\s+/).slice(1).map(t => { const n = parseInt(t, 10); return n < 0 ? vs.length / 3 + n : n - 1; });
+        for (let i = 1; i < q.length - 1; i++) for (const k of [q[0], q[i], q[i + 1]]) out.push(vs[k * 3], vs[k * 3 + 1], vs[k * 3 + 2]);
+      }
+    }
+    if (!out.length) throw new Error("No faces found in this OBJ.");
+    const g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(out, 3)); return g;
+  }
+  function parseSTL(buf) {
+    const dv = new DataView(buf), n = buf.byteLength >= 84 ? dv.getUint32(80, true) : 0, out = [];
+    if (n && 84 + n * 50 === buf.byteLength) {
+      for (let i = 0; i < n; i++) for (let v = 0; v < 3; v++) { const o = 84 + i * 50 + 12 + v * 12; out.push(dv.getFloat32(o, true), dv.getFloat32(o + 4, true), dv.getFloat32(o + 8, true)); }
+    } else {
+      const re = /vertex\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/g, txt = new TextDecoder().decode(buf); let m;
+      while ((m = re.exec(txt))) out.push(+m[1], +m[2], +m[3]);
+    }
+    if (!out.length) throw new Error("No triangles found in this STL.");
+    const g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(out, 3)); return g;
+  }
+  async function loadFile(file) {
+    if (!file) return;
+    const name = file.name.replace(/\.[^.]+$/, ""), ext = (file.name.split(".").pop() || "").toLowerCase();
+    try {
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file), img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("Couldn't read that image.")); img.src = url; });
+        custom = { type: "image", name, build: () => imageForm(img) };
+      } else if (ext === "obj") {
+        const geom = parseOBJ(await file.text()); custom = { type: "mesh", name, build: () => meshForm(geom.clone()) };
+      } else if (ext === "stl") {
+        const geom = parseSTL(await file.arrayBuffer()); custom = { type: "mesh", name, build: () => meshForm(geom.clone()) };
+      } else throw new Error("Use a PNG/JPG image or an .obj/.stl model.");
+      S.shape = "custom"; yaw = 0; pitch = custom.type === "image" ? 0 : 0.42;
+      syncUI(); rebuild(); status("Loaded " + file.name);
+    } catch (e) { status(e.message || "Couldn't load that file."); }
+  }
+  $("upImg").addEventListener("change", e => { loadFile(e.target.files[0]); e.target.value = ""; });
+  $("upObj").addEventListener("change", e => { loadFile(e.target.files[0]); e.target.value = ""; });
+  $("stage").addEventListener("dragover", e => { e.preventDefault(); });
+  $("stage").addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+
+  function rebuild() {
+    seed = S.seed * 7919 + Object.keys(SHAPES).indexOf(S.shape) * 101 + 3;
+    if (S.shape === "custom" && custom) return rebuildCustom();
+    const F = S.shape === "sphere" ? sphereForm() : S.shape === "torus" ? torusForm()
+      : polyForm(S.shape === "cube" ? new T.BoxGeometry(1.45, 1.45, 1.45) : new T.IcosahedronGeometry(1.05, 0));
+    const U = mat.uniforms; U.uKind.value = F.kind;
+    F.C.forEach((c, i) => { U.uC0.value[i].copy(c[0]); U.uC1.value[i].copy(c[1]); U.uC2.value[i].copy(c[2]); U.uC3.value[i].copy(c[3]); });
+    const lens = F.C.map(F.len), lt = lens.reduce((x, y) => x + y, 0);
+    const knots = F.kind === 2 ? 0 : Math.min(F.C.length, F.kind === 0 ? F.C.length : 6);
+    const N = Math.round(40000 + Math.pow(S.count / 100, 1.5) * 360000);
+    const vol = new Float32Array(N * 3), surf = new Float32Array(N * 3), off = new Float32Array(N * 3), seamA = new Float32Array(N * 4), rand = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) {
+      const s = F.surface();
+      const k = Math.cbrt(rnd()), puff = s.clone().normalize().multiplyScalar(s.length() * 0.5 + 0.55);
+      const v = s.clone().lerp(puff, 0.5).multiplyScalar(0.35 + 0.7 * k).add(new V(gauss(), gauss(), gauss()).multiplyScalar(0.07));
+      vol.set([v.x, v.y, v.z], i * 3); surf.set([s.x, s.y, s.z], i * 3);
+      off.set([gauss() * 0.6, gauss() * 0.6, gauss() * 0.6], i * 3);
+      let ci;
+      if (knots && rnd() < 0.13) ci = 100 + Math.floor(rnd() * knots);
+      else { let x = rnd() * lt; ci = 0; while (ci < lens.length - 1 && x > lens[ci]) { x -= lens[ci]; ci++; } }
+      seamA.set([ci, rnd(), rnd(), rnd()], i * 4);
+      rand.set([rnd(), rnd(), rnd(), rnd()], i * 4);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute("position", new T.BufferAttribute(vol, 3));
+    g.setAttribute("aSurf", new T.BufferAttribute(surf, 3));
+    g.setAttribute("aOff", new T.BufferAttribute(off, 3));
+    g.setAttribute("aSeam", new T.BufferAttribute(seamA, 4));
+    g.setAttribute("aRand", new T.BufferAttribute(rand, 4));
+    g.setAttribute("aSegA", new T.BufferAttribute(new Float32Array(N * 3), 3));
+    g.setAttribute("aSegB", new T.BufferAttribute(new Float32Array(N * 3), 3));
+    mat.uniforms.uFlat.value = 0;
+    setPoints(g);
+  }
+  function setPoints(g) {
+    g.boundingSphere = new T.Sphere(new V(), 3);
+    if (points) { scene.remove(points); points.geometry.dispose(); }
+    points = new T.Points(g, mat); points.frustumCulled = false; scene.add(points);
+    dirty = true;
+  }
+  function rebuildCustom() {
+    const F = custom.build();
+    mat.uniforms.uKind.value = 3; mat.uniforms.uFlat.value = F.flat ? 1 : 0;
+    const N = Math.round(40000 + Math.pow(S.count / 100, 1.5) * 360000);
+    const vol = new Float32Array(N * 3), surf = new Float32Array(N * 3), off = new Float32Array(N * 3), A = new Float32Array(N * 3), B = new Float32Array(N * 3), seamA = new Float32Array(N * 4), rand = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) {
+      const s = F.surface(), v = F.volume(s);
+      vol.set([v.x, v.y, v.z], i * 3); surf.set([s.x, s.y, s.z], i * 3);
+      off.set([gauss() * 0.6, gauss() * 0.6, gauss() * 0.6], i * 3);
+      let ci = 0, a, b;
+      if (rnd() < 0.1) { ci = 100; a = b = F.knot(); } else [a, b] = F.seg();
+      A.set([a.x, a.y, a.z], i * 3); B.set([b.x, b.y, b.z], i * 3);
+      seamA.set([ci, rnd(), rnd(), rnd()], i * 4);
+      rand.set([rnd(), rnd(), rnd(), rnd()], i * 4);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute("position", new T.BufferAttribute(vol, 3));
+    g.setAttribute("aSurf", new T.BufferAttribute(surf, 3));
+    g.setAttribute("aOff", new T.BufferAttribute(off, 3));
+    g.setAttribute("aSegA", new T.BufferAttribute(A, 3));
+    g.setAttribute("aSegB", new T.BufferAttribute(B, 3));
+    g.setAttribute("aSeam", new T.BufferAttribute(seamA, 4));
+    g.setAttribute("aRand", new T.BufferAttribute(rand, 4));
+    setPoints(g);
+  }
+
+  // ---------- drag ----------
+  const canvas = $("out");
+  let spin = 0, yaw = 0.7, pitch = 0.42, dragging = false, lx = 0, ly = 0;
+  canvas.style.cursor = "grab";
+  canvas.addEventListener("pointerdown", e => { dragging = true; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => { if (!dragging) return; yaw += (e.clientX - lx) * 0.008; pitch = Math.max(-1.2, Math.min(1.2, pitch + (e.clientY - ly) * 0.006)); lx = e.clientX; ly = e.clientY; dirty = true; });
+  const stop = () => { dragging = false; }; canvas.addEventListener("pointerup", stop); canvas.addEventListener("pointercancel", stop);
+
+  // ---------- layout & render ----------
+  let cssW = 0, cssH = 0, dirty = true, simT = 0, cycT = 0;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const st = $("stage"), bw = st.clientWidth - 40, bh = st.clientHeight - 40;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw; if (h > bh) { h = bh; w = bh * aw / ah; }
+    cssW = Math.round(w); cssH = Math.round(h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(cssW, cssH);
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe($("stage"));
+  function draw() {
+    const pr = renderer.getPixelRatio(), n = +S.layout;
+    const bg = new T.Color(S.bgc), lum = 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b, light = lum > 0.45;
+    renderer.setClearColor(bg, 1);
+    renderer.setScissorTest(false); renderer.clear();
+    mat.blending = light ? T.NormalBlending : T.AdditiveBlending;
+    mat.uniforms.uColor.value.set(S.dotc);
+    mat.uniforms.uSeams.value = 0.15 + S.seams / 100 * 0.75;
+    mat.uniforms.uWobble.value = S.wobble / 100 * 2;
+    mat.uniforms.uLife.value = S.life / 100 * 2;
+    mat.uniforms.uTime.value = simT;
+    // cells: a square grid fitted inside the frame
+    const cell = Math.min(cssW, cssH) / n, ox = (cssW - cell * n) / 2, oy = (cssH - cell * n) / 2;
+    // keep the dot texture the same at any export size: scale with the cell, not the screen
+    const scale = cell / 700;
+    mat.uniforms.uSize.value = (0.6 + S.size / 100 * 2.6) * pr * Math.max(0.6, Math.min(1.6, scale * (n > 1 ? 1.5 : 1)));
+    // fewer pixels per cell means more dots stacked per pixel, so thin the alpha to keep the grain
+    const dens = (light ? 0.22 : 0.12) * (0.25 + S.bright / 100 * 1.5) * Math.min(1, 160000 / points.geometry.attributes.position.count) ** 0.5 * Math.min(1, (cell * pr / 1100) ** 1.4);
+    mat.uniforms.uAlpha.value = Math.min(1, dens);
+    camera.aspect = 1; camera.position.set(0, 0, 6.2 * (1.45 - S.zoom / 100 * 0.7)); camera.lookAt(0, 0, 0); camera.updateProjectionMatrix();
+    const live = S.cycle === "on" && n === 1;
+    // ping-pong: noise -> structure, hold, back to noise
+    const ping = (() => { const u = (cycT % 10) / 10; return u < 0.4 ? u / 0.4 : u < 0.6 ? 1 : u < 0.9 ? 1 - (u - 0.6) / 0.3 : 0; })();
+    const ease = x => x * x * (3 - 2 * x);
+    for (let i = 0; i < n * n; i++) {
+      const r = Math.floor(i / n), c = i % n;
+      const x = ox + c * cell, y = cssH - (oy + (r + 1) * cell);
+      renderer.setViewport(x, y, cell, cell); renderer.setScissor(x, y, cell, cell); renderer.setScissorTest(true);
+      const t = n === 1 ? (live ? ease(ping) : S.resolve / 100) : (i / (n * n - 1)) * (S.resolve / 100);
+      mat.uniforms.uResolve.value = t;
+      const flat = mat.uniforms.uFlat.value > 0.5;
+      if (flat) points.rotation.set(pitch + 0.12 * Math.sin(spin * 0.7 + i), yaw + 0.38 * Math.sin(spin * 1.1 + i * 0.9), 0);
+      else points.rotation.set(pitch, yaw + spin + i * 0.9, n > 1 ? 0.1 * Math.sin(i) : 0);
+      renderer.render(scene, camera);
+    }
+    renderer.setScissorTest(false);
+  }
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!REDUCED) {
+      const sp = 0.1 + S.speed / 100 * 1.5;
+      simT += dt * sp * 2; spin += dt * 0.15 * sp;
+      if (S.cycle === "on") cycT += dt * sp * 1.5;
+      dirty = true;
+    }
+    if (dirty && cssW && points) { draw(); dirty = false; }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- export ----------
+  const dlReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  let stT; const status = m => { $("status").textContent = m; clearTimeout(stT); stT = setTimeout(() => $("status").textContent = "", 5000); };
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) { try { await dl.save({ filename: name, data: blob }); status("Saved " + name); } catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); } return; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); status("Saved " + name);
+  }
+  $("exPng").onclick = () => {
+    const pr = renderer.getPixelRatio();
+    renderer.setPixelRatio(Math.max(pr, Math.min(4, 2400 / Math.max(cssW, cssH))));
+    renderer.setSize(cssW, cssH, false); draw();
+    canvas.toBlob(b => {
+      renderer.setPixelRatio(pr); renderer.setSize(cssW, cssH); dirty = true;
+      b ? saveFile(`gray-form-${S.shape}.png`, b) : status("PNG export failed");
+    }, "image/png");
+  };
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!canvas.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    const rec = new MediaRecorder(canvas.captureStream(60), { mimeType: mime, videoBitsPerSecond: 24e6 }), chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => { recording = false; $("exVid").disabled = false; $("exVid").textContent = "Record 8s"; const ext = mime.startsWith("video/mp4") ? "mp4" : "webm"; saveFile(`gray-form-${S.shape}-8s.${ext}`, new Blob(chunks, { type: mime.split(";")[0] })); };
+    recording = true; $("exVid").disabled = true; $("exVid").textContent = "Recording…";
+    rec.start(250); setTimeout(() => rec.stop(), 8000);
+  };
+
+  syncUI();
+  layout();
+  rebuild();
+  requestAnimationFrame(loop);
+})();
+</script>
