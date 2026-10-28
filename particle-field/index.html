@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Particle Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, particle stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sec { display: grid; gap: 18px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+
+.sl { display: grid; gap: 4px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; margin-top: -10.5px; }
+.track input::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 22px; height: 24px; line-height: 24px; text-align: center; font-size: 11px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+.ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--panel-muted); }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sw { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .06em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #000; transition: background-color .2s; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.cap { position: absolute; left: 16px; bottom: 14px; right: 16px; font-size: 10px; letter-spacing: .06em; color: #8a8c92; pointer-events: none; }
+.drop { position: absolute; inset: 12px; border: 1.5px dashed var(--accent); border-radius: 12px; display: grid; place-items: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); background: rgba(75,59,255,.08); pointer-events: none; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(72vh, 125vw); order: -1; }
+  .panel { overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { .stage { transition: none; } }
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Particle controls">
+    <div class="ph"><b>PARTICLE FIELD</b><span id="compName">Coins</span></div>
+
+    <div class="sec">
+      <span class="lbl">Composition</span>
+      <div class="chips" role="group" aria-label="Composition">
+        <button type="button" class="chip" data-comp="coins">Coins</button>
+        <button type="button" class="chip" data-comp="wave">Wave</button>
+        <button type="button" class="chip" data-comp="bloom">Bloom</button>
+        <button type="button" class="chip" data-comp="grid">Grid</button>
+        <button type="button" class="chip" data-comp="text">Text</button>
+        <button type="button" class="chip" data-comp="image">Image</button>
+      </div>
+      <input type="text" class="txt" id="text" maxlength="24" aria-label="Text to form" hidden>
+      <div id="imgRow" class="row" hidden>
+        <button class="btn" id="upload" type="button">Upload image</button>
+        <div class="seg" role="group" aria-label="Particles gather on">
+          <button type="button" data-pol="light">Light</button>
+          <button type="button" data-pol="dark">Dark</button>
+        </div>
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+
+    <div class="sec" id="formCtl"><span class="sub">Form</span></div>
+
+    <div class="sec" id="motionCtl">
+      <span class="sub">Motion</span>
+      <div class="row"><span class="lbl">Pointer</span>
+        <div class="seg" role="group" aria-label="Pointer behaviour">
+          <button type="button" data-ptr="repel">Repel</button>
+          <button type="button" data-ptr="attract">Attract</button>
+          <button type="button" data-ptr="off">Off</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="Part of the form breaks apart, then reassembles: the filter catching something.">Filter pulse</span>
+        <div class="seg" role="group" aria-label="Filter pulse">
+          <button type="button" data-pulse="off">Off</button>
+          <button type="button" data-pulse="auto">Auto</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn" id="pulseNow" type="button">Pulse now</button>
+        <button class="btn" id="play" type="button">Pause</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <span class="sub">Style</span>
+      <div class="row"><span class="lbl">Background</span><input type="color" class="sw" id="bg" aria-label="Background color"></div>
+      <div class="row"><span class="lbl">Particles</span><input type="color" class="sw" id="fg" aria-label="Particle color"></div>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="3:4">3:4</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="16:9">16:9</button>
+          <button type="button" data-ar="9:16">9:16</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record 8s</button>
+      </div>
+      <button class="btn" id="reset" type="button">Reset</button>
+      <div class="btns">
+        <button class="btn quiet" id="copySet" type="button">Copy settings</button>
+        <button class="btn quiet" id="loadSet" type="button">Load settings</button>
+      </div>
+      <textarea class="txt" id="setBox" rows="4" hidden aria-label="Settings code" style="height:auto;padding:8px 10px;font-size:10px;line-height:1.4;resize:vertical"></textarea>
+      <button class="btn" id="applySet" type="button" hidden>Apply pasted settings</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="cv" aria-label="Particle field preview"></canvas>
+    <div class="cap" id="cap">Move the pointer over the field. Drop an image to form it in particles.</div>
+    <div class="drop" id="drop" hidden>Drop image</div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const DEF = {
+    "comp": "grid",
+    "text": "TOKEN",
+    "polarity": "light",
+    "particles": 3,
+    "edge": 7,
+    "fill": 1,
+    "scatter": 8,
+    "size": 1,
+    "scale": 3,
+    "flow": 2,
+    "speed": 4,
+    "trails": 2,
+    "pointer": "repel",
+    "pulse": "off",
+    "bg": "#3d1022",
+    "fg": "#ff00d0",
+    "ar": "3:4"
+  };
+  const KEY = "particle-field-settings-v1";
+  const clone = o => JSON.parse(JSON.stringify(o));
+  let S = clone(DEF);
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(clone(DEF), s); } catch (e) {}
+  if (S.comp === "image") S.comp = "coins";
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d"), stage = $("stage");
+  const NAMES = { coins: "Coins", wave: "Wave", bloom: "Bloom", grid: "Grid", text: "Text", image: "Image" };
+  const COUNTS = [15000, 30000, 50000, 75000, 100000, 130000, 170000, 220000];
+  const SIZES = [1, 1.5, 2, 2.5, 3, 3.5, 4, 5];
+  const MAXN = COUNTS[COUNTS.length - 1];
+
+  // ---------- sliders ----------
+  const SLIDERS = [
+    ["particles", "Particles", "How many particles make up the field.", "formCtl", true],
+    ["edge", "Edge", "How tightly particles hug the outlines. Higher is a crisper line.", "formCtl", true],
+    ["fill", "Fill", "How far the haze spreads inward from each outline.", "formCtl", true],
+    ["scatter", "Scatter", "Stray particles drifting across the whole frame.", "formCtl", true],
+    ["size", "Size", "Size of each particle.", "formCtl", false],
+    ["scale", "Scale", "Size of the composition in the frame.", "formCtl", true],
+    ["flow", "Flow", "Strength of the current moving through the field.", "motionCtl", false],
+    ["speed", "Speed", "How fast particles snap back to their place.", "motionCtl", false],
+    ["trails", "Trails", "Motion trails left behind as particles move.", "motionCtl", false]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent, reshape] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="1" max="8" step="1"><span class="bubble" aria-hidden="true"></span></div>
+      <div class="ends" aria-hidden="true"><span>1</span><span>8</span></div>`;
+    const host = $(parent);
+    host.insertBefore(w, parent === "motionCtl" ? host.querySelector(".row") : null);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => {
+      S[k] = +input.value; syncSlider(k); persist();
+      if (reshape) scheduleRebuild();
+    });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k];
+    input.value = S[k];
+    bub.textContent = S[k];
+    bub.style.left = `calc(${(S[k] - 1) / 7} * (100% - 22px))`;
+  }
+
+  // ---------- other controls ----------
+  const bindSeg = (attr, key, after) => document.querySelectorAll(`[data-${attr}]`).forEach(b =>
+    b.addEventListener("click", () => { S[key] = b.dataset[attr]; syncUI(); persist(); after && after(); }));
+  bindSeg("comp", "comp", () => {
+    if (S.comp === "image" && !imgSrc) { $("file").click(); }
+    rebuild(true);
+  });
+  bindSeg("pol", "polarity", () => rebuild(false));
+  bindSeg("ptr", "pointer");
+  bindSeg("pulse", "pulse");
+  bindSeg("ar", "ar", () => { layout(); });
+  $("bg").addEventListener("input", e => { S.bg = e.target.value; syncUI(); persist(); buildLUT(); });
+  $("fg").addEventListener("input", e => { S.fg = e.target.value; persist(); buildLUT(); });
+  let textTimer;
+  $("text").addEventListener("input", e => { S.text = e.target.value; persist(); clearTimeout(textTimer); textTimer = setTimeout(() => rebuild(true), 250); });
+  $("pulseNow").onclick = () => pulse();
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = clone(DEF); syncUI(); persist(); buildLUT(); layout(); scatterAll(); status("Reset to defaults"); };
+  $("copySet").onclick = () => {
+    const code = JSON.stringify(S), box = $("setBox");
+    box.hidden = false; box.value = code; $("applySet").hidden = true;
+    const fallback = () => { box.focus(); box.select(); status("Select all and copy the settings above."); };
+    try { navigator.clipboard.writeText(code).then(() => status("Settings copied. Paste them anywhere to share this look."), fallback); } catch (e) { fallback(); }
+  };
+  $("loadSet").onclick = () => { const box = $("setBox"); box.hidden = false; box.value = ""; box.placeholder = "Paste settings here"; box.focus(); $("applySet").hidden = false; };
+  $("applySet").onclick = () => {
+    try {
+      const v = JSON.parse($("setBox").value);
+      if (!v || typeof v !== "object") throw 0;
+      S = Object.assign(clone(DEF), v);
+      if (S.comp === "image") S.comp = "coins";
+      syncUI(); persist(); buildLUT(); layout(); scatterAll();
+      $("setBox").hidden = true; $("applySet").hidden = true;
+      status("Settings loaded");
+    } catch (e) { status("Those settings couldn't be read. Paste the full text from Copy settings."); }
+  };
+
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    press("comp", S.comp); press("pol", S.polarity); press("ptr", S.pointer); press("pulse", S.pulse); press("ar", S.ar);
+    $("bg").value = S.bg; $("fg").value = S.fg;
+    $("text").value = S.text;
+    $("text").hidden = S.comp !== "text";
+    $("imgRow").hidden = S.comp !== "image";
+    $("compName").textContent = NAMES[S.comp] + (S.comp === "image" && imgName ? " · " + imgName : "");
+    $("play").textContent = playing ? "Pause" : "Play";
+    stage.style.backgroundColor = S.bg;
+  }
+
+  // ---------- image input ----------
+  let imgSrc = null, imgName = "";
+  function loadFile(f) {
+    if (!f || !f.type.startsWith("image/")) { if (f) status("Use an image file: PNG, JPG or WebP."); return; }
+    const url = URL.createObjectURL(f), img = new Image();
+    img.onload = () => { imgSrc = img; imgName = f.name; S.comp = "image"; syncUI(); persist(); rebuild(true); };
+    img.onerror = () => status("That image couldn't be read. Try PNG, JPG or WebP.");
+    img.src = url;
+  }
+  $("upload").onclick = () => $("file").click();
+  $("file").onchange = e => { loadFile(e.target.files[0]); e.target.value = ""; };
+  let dragDepth = 0;
+  stage.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; $("drop").hidden = false; });
+  stage.addEventListener("dragover", e => e.preventDefault());
+  stage.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
+  stage.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; $("drop").hidden = true; loadFile(e.dataTransfer.files[0]); });
+  document.addEventListener("paste", e => {
+    const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/"));
+    if (f) loadFile(f);
+  });
+
+  // ---------- particles ----------
+  const px = new Float32Array(MAXN), py = new Float32Array(MAXN);
+  const vx = new Float32Array(MAXN), vy = new Float32Array(MAXN);
+  const hx = new Float32Array(MAXN), hy = new Float32Array(MAXN);
+  const lum = new Float32Array(MAXN), ph = new Float32Array(MAXN), hold = new Float32Array(MAXN);
+  const grp = new Int32Array(MAXN);
+  for (let i = 0; i < MAXN; i++) { lum[i] = 0.45 + Math.random() * 0.55; ph[i] = Math.random() * 0.8; }
+  let N = 0, W = 2, H = 2;
+  let groups = []; // [{cx, cy}] for pulse targets
+
+  const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+
+  // ---- vector shapes: closed polylines ----
+  function xform(pts, cx, cy, rot) {
+    const c = Math.cos(rot), s = Math.sin(rot), out = new Float32Array(pts.length);
+    for (let i = 0; i < pts.length; i += 2) { out[i] = cx + pts[i] * c - pts[i + 1] * s; out[i + 1] = cy + pts[i] * s + pts[i + 1] * c; }
+    return out;
+  }
+  function rrect(cx, cy, w, h, r, rot) {
+    const hw = w / 2, hh = h / 2; r = Math.min(r, hw, hh);
+    const pts = [];
+    for (const [x, y, a0] of [[hw - r, hh - r, 0], [-hw + r, hh - r, Math.PI / 2], [-hw + r, -hh + r, Math.PI], [hw - r, -hh + r, Math.PI * 1.5]])
+      for (let k = 0; k <= 8; k++) { const a = a0 + k / 8 * Math.PI / 2; pts.push(x + r * Math.cos(a), y + r * Math.sin(a)); }
+    return xform(pts, cx, cy, rot || 0);
+  }
+  function circ(cx, cy, r) {
+    const pts = [];
+    for (let k = 0; k < 64; k++) { const a = k / 64 * Math.PI * 2; pts.push(cx + r * Math.cos(a), cy + r * Math.sin(a)); }
+    return new Float32Array(pts);
+  }
+  function prim(pts, w = 1, sharp = 1) {
+    const n = pts.length / 2, cum = new Float32Array(n + 1);
+    let area = 0, cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, x0 = pts[2 * i], y0 = pts[2 * i + 1], x1 = pts[2 * j], y1 = pts[2 * j + 1];
+      cum[i + 1] = cum[i] + Math.hypot(x1 - x0, y1 - y0);
+      area += x0 * y1 - x1 * y0; cx += x0; cy += y0;
+    }
+    const total = cum[n];
+    return { pts, cum, n, total, w, sharp, sign: Math.abs(area) < total * 0.5 ? 0 : Math.sign(area), cx: cx / n, cy: cy / n };
+  }
+
+  function buildComposition(comp, s) {
+    const P = [], cx = W / 2, cy = H / 2, R = Math.random;
+    if (comp === "coins") {
+      const p = 0.27 * s, nx = Math.ceil(W / p / 2) + 2, ny = Math.ceil(H / p / 2) + 2;
+      for (let gy = -ny; gy <= ny; gy++) for (let gx = -nx; gx <= nx; gx++) {
+        const x = cx + gx * p, y = cy + gy * p;
+        if (x < -p || x > W + p || y < -p || y > H + p) continue;
+        if ((gx + gy) % 2 === 0) P.push(prim(rrect(x, y, p * 1.3, p * 1.3, p * 0.22, Math.PI / 4), 0.35 + R() * 0.65));
+        P.push(prim(circ(x, y, p * 0.33), (gx + gy) % 2 === 0 ? 0.9 : 0.45, 1.6));
+      }
+    } else if (comp === "wave") {
+      const c = 0.2 * s;
+      for (let gy = -3; gy <= 3; gy++) for (let gx = -3; gx <= 3; gx++)
+        P.push(prim(rrect(cx + gx * c * 1.02 - c * 0.5, cy + gy * c * 1.02, c, c, c * 0.14, 0), 0.07 + R() * 0.12));
+      const L = 0.5 * s, h = 0.17 * s, A = 0.065 * s, k = Math.PI * 2 / (L * 1.05), pts = [];
+      for (let i = 0; i <= 60; i++) { const u = -L + 2 * L * i / 60; pts.push(u, -h + A * Math.sin(u * k)); }
+      for (let i = 0; i <= 60; i++) { const u = L - 2 * L * i / 60; pts.push(u, h + A * Math.sin(u * k)); }
+      const rot = -Math.PI / 4;
+      P.push(prim(xform(pts, cx, cy, rot), 3.2, 1.3));
+      P.push(prim(xform([-0.36 * s, 0, 0.36 * s, 0], cx, cy, rot), 1.4, 2.4));
+    } else if (comp === "bloom") {
+      for (let k = 0; k < 8; k++) {
+        const a = k * Math.PI / 4, d = 0.19 * s;
+        P.push(prim(rrect(cx + d * Math.cos(a), cy + d * Math.sin(a), 0.32 * s, 0.24 * s, 0.06 * s, a), 0.35 + R() * 0.2));
+      }
+      const o = 0.06 * s;
+      P.push(prim(rrect(cx - o, cy + o, 0.2 * s, 0.2 * s, 0.07 * s, Math.PI / 4 + 0.15), 1.7, 2));
+      P.push(prim(rrect(cx + o, cy - o, 0.2 * s, 0.2 * s, 0.07 * s, Math.PI / 4 - 0.1), 1.7, 2));
+    } else if (comp === "grid") {
+      const c = 0.082 * s;
+      for (let j = -6; j <= 6; j++) for (let i = -7; i <= 7; i++) {
+        const u = i - j * 0.75;
+        if (Math.abs(u) > 4.6 || Math.abs(j) > 5) continue;
+        const d2 = i * i + j * j;
+        if (d2 > 12 && R() < 0.15) continue;
+        P.push(prim(rrect(cx + i * c, cy + j * c, c * 0.96, c * 0.96, c * 0.22, 0), 0.1 + 0.6 * Math.exp(-d2 / 10)));
+      }
+      P.push(prim(rrect(cx, cy, c * 3, c * 3, c * 0.3, 0), 2.2, 2.2));
+      P.push(prim(rrect(cx - c * 0.5, cy - c * 0.5, c, c, c * 0.25, 0), 0.9, 1.6));
+      P.push(prim(rrect(cx + c * 0.5, cy + c * 0.5, c, c, c * 0.25, 0), 0.9, 1.6));
+    }
+    return P;
+  }
+
+  // ---- raster sources (text, image): sample by edge + tone ----
+  const ras = document.createElement("canvas"), rctx = ras.getContext("2d", { willReadFrequently: true });
+  function buildRaster(comp, s) {
+    const k = 2, rw = Math.max(2, Math.round(W / k)), rh = Math.max(2, Math.round(H / k));
+    ras.width = rw; ras.height = rh;
+    rctx.fillStyle = "#000"; rctx.fillRect(0, 0, rw, rh);
+    if (comp === "text") {
+      const t = (S.text || " ").toUpperCase();
+      rctx.fillStyle = "#fff"; rctx.textAlign = "center"; rctx.textBaseline = "middle";
+      let fs = rh * 0.4 * (s / Math.min(W, H));
+      rctx.font = `700 ${fs}px "Helvetica Neue", Arial, sans-serif`;
+      const tw = rctx.measureText(t).width, maxW = rw * 0.86 * (s / Math.min(W, H));
+      if (tw > maxW) { fs *= maxW / tw; rctx.font = `700 ${fs}px "Helvetica Neue", Arial, sans-serif`; }
+      rctx.fillText(t, rw / 2, rh / 2);
+    } else if (imgSrc) {
+      const sc = Math.max(rw / imgSrc.naturalWidth, rh / imgSrc.naturalHeight) * (s / Math.min(W, H));
+      const iw = imgSrc.naturalWidth * sc, ih = imgSrc.naturalHeight * sc;
+      rctx.drawImage(imgSrc, (rw - iw) / 2, (rh - ih) / 2, iw, ih);
+    }
+    const d = rctx.getImageData(0, 0, rw, rh).data, L = new Float32Array(rw * rh);
+    const inv = comp === "image" && S.polarity === "dark";
+    for (let i = 0; i < rw * rh; i++) {
+      const v = (0.2126 * d[4 * i] + 0.7152 * d[4 * i + 1] + 0.0722 * d[4 * i + 2]) / 255;
+      L[i] = inv ? 1 - v : v;
+    }
+    const edgeW = 0.6 + S.edge * 0.5, fillW = 0.04 + S.fill * 0.05;
+    const cdf = new Float64Array(rw * rh);
+    let acc = 0;
+    for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+      const i = y * rw + x;
+      let e = 0;
+      if (x > 0 && y > 0 && x < rw - 1 && y < rh - 1) {
+        const gx = L[i - rw + 1] + 2 * L[i + 1] + L[i + rw + 1] - L[i - rw - 1] - 2 * L[i - 1] - L[i + rw - 1];
+        const gy = L[i + rw - 1] + 2 * L[i + rw] + L[i + rw + 1] - L[i - rw - 1] - 2 * L[i - rw] - L[i - rw + 1];
+        e = Math.min(1, Math.hypot(gx, gy) / 2);
+      }
+      acc += edgeW * e * e + fillW * Math.pow(L[i], 1.5);
+      cdf[i] = acc;
+    }
+    return { cdf, rw, rh, k, total: acc };
+  }
+
+  // ---- assign home positions ----
+  function rebuild(kick) {
+    const n = COUNTS[S.particles - 1];
+    const s = Math.min(W, H) * (0.7 + (S.scale - 1) * 0.1);
+    const scatterF = (S.scatter - 1) / 7 * 0.25;
+    const edgeSig = s * (0.0135 - S.edge * 0.0015);
+    const fillFrac = 0.15 + S.fill * 0.07, fillDepth = s * (0.008 + S.fill * 0.006);
+    groups = [];
+    let vec = null, rs = null;
+    if (S.comp === "text" || S.comp === "image") rs = buildRaster(S.comp, s);
+    else vec = buildComposition(S.comp, s);
+
+    let cw = null, cwTotal = 0;
+    if (vec) {
+      cw = new Float64Array(vec.length);
+      vec.forEach((p, i) => { cwTotal += p.w * p.total; cw[i] = cwTotal; groups.push({ cx: p.cx, cy: p.cy }); });
+    } else {
+      for (let g = 0; g < 24; g++) groups.push({ cx: Math.random() * W, cy: Math.random() * H });
+    }
+    const bs = (arr, v) => { let lo = 0, hi = arr.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] < v) lo = m + 1; else hi = m; } return lo; };
+
+    for (let i = 0; i < n; i++) {
+      if (i >= N) { px[i] = Math.random() * W; py[i] = Math.random() * H; vx[i] = vy[i] = 0; }
+      hold[i] = 0;
+      if (Math.random() < scatterF || (rs && rs.total <= 0)) { hx[i] = Math.random() * W; hy[i] = Math.random() * H; grp[i] = -1; continue; }
+      if (vec) {
+        const pi = bs(cw, Math.random() * cwTotal), P = vec[pi];
+        const dd = Math.random() * P.total, k = Math.max(0, bs(P.cum, dd) - 1);
+        const a = k % P.n, b = (k + 1) % P.n;
+        const x0 = P.pts[2 * a], y0 = P.pts[2 * a + 1], x1 = P.pts[2 * b], y1 = P.pts[2 * b + 1];
+        const seg = P.cum[k + 1] - P.cum[k] || 1, t = (dd - P.cum[k]) / seg;
+        const dx = (x1 - x0) / seg, dy = (y1 - y0) / seg;
+        let sg = P.sign || (Math.random() < 0.5 ? 1 : -1);
+        const nx = sg > 0 ? -dy : dy, ny = sg > 0 ? dx : -dx;
+        const off = Math.random() < fillFrac ? -Math.log(1 - Math.random()) * fillDepth / P.sharp : gauss() * edgeSig / P.sharp;
+        hx[i] = x0 + (x1 - x0) * t + nx * off;
+        hy[i] = y0 + (y1 - y0) * t + ny * off;
+        grp[i] = pi;
+      } else {
+        const idx = bs(rs.cdf, Math.random() * rs.total);
+        const x = (idx % rs.rw + Math.random()) * rs.k, y = (Math.floor(idx / rs.rw) + Math.random()) * rs.k;
+        hx[i] = x + gauss() * edgeSig * 0.3; hy[i] = y + gauss() * edgeSig * 0.3;
+        let best = 0, bd = Infinity;
+        for (let g = 0; g < groups.length; g++) { const q = (groups[g].cx - x) ** 2 + (groups[g].cy - y) ** 2; if (q < bd) { bd = q; best = g; } }
+        grp[i] = best;
+      }
+      if (kick) { vx[i] += gauss() * 2; vy[i] += gauss() * 2; }
+    }
+    N = n;
+  }
+  let rebuildTimer;
+  function scheduleRebuild() { clearTimeout(rebuildTimer); rebuildTimer = setTimeout(() => rebuild(false), 60); }
+
+  function scatterAll() {
+    for (let i = 0; i < N; i++) { px[i] = Math.random() * W; py[i] = Math.random() * H; vx[i] = vy[i] = 0; hold[i] = 0; }
+  }
+
+  function pulse() {
+    if (!groups.length || !N) return;
+    const chosen = new Set();
+    const target = Math.max(1, Math.round(groups.length * (S.comp === "text" || S.comp === "image" ? 0.12 : 0.22)));
+    while (chosen.size < target) chosen.add(Math.floor(Math.random() * groups.length));
+    const s = Math.min(W, H);
+    for (let i = 0; i < N; i++) {
+      if (!chosen.has(grp[i])) continue;
+      const g = groups[grp[i]];
+      let dx = px[i] - g.cx, dy = py[i] - g.cy;
+      const d = Math.hypot(dx, dy) || 1;
+      const sp = s * 0.012 * (0.4 + Math.random());
+      vx[i] += dx / d * sp + gauss() * sp * 0.4;
+      vy[i] += dy / d * sp + gauss() * sp * 0.4;
+      hold[i] = 35 + Math.random() * 45;
+    }
+  }
+
+  // ---------- pointer ----------
+  let ptr = null;
+  cv.addEventListener("pointermove", e => {
+    const r = cv.getBoundingClientRect();
+    ptr = { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  });
+  cv.addEventListener("pointerleave", () => { ptr = null; });
+  cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); $("cap").hidden = true; });
+
+  // ---------- simulation + render ----------
+  let acc = new Float32Array(4), img = null, buf32 = null;
+  const lut = new Uint32Array(256);
+  function buildLUT() {
+    const a = parseInt(S.bg.slice(1), 16), b = parseInt(S.fg.slice(1), 16);
+    const ar = a >> 16, ag = (a >> 8) & 255, ab = a & 255, br = b >> 16, bgc = (b >> 8) & 255, bb = b & 255;
+    for (let v = 0; v < 256; v++) {
+      const t = v / 255;
+      lut[v] = (255 << 24) | (Math.round(ab + (bb - ab) * t) << 16) | (Math.round(ag + (bgc - ag) * t) << 8) | Math.round(ar + (br - ar) * t);
+    }
+  }
+
+  function step(dt, t) {
+    const k = 0.012 + S.speed * 0.01;
+    const damp = Math.pow(0.86, dt);
+    const A = (S.flow - 1) / 7 * 0.9;
+    const s = Math.min(W, H), fq = 7 / s;
+    let pr = 0, pxp = 0, pyp = 0, pst = 0;
+    if (ptr && S.pointer !== "off") { pr = s * 0.13; pxp = ptr.x; pyp = ptr.y; pst = (S.pointer === "repel" ? 1 : -0.6) * s * 0.004; }
+    for (let i = 0; i < N; i++) {
+      let x = px[i], y = py[i], ax = 0, ay = 0;
+      if (hold[i] > 0) hold[i] -= dt;
+      else { ax = (hx[i] - x) * k; ay = (hy[i] - y) * k; }
+      if (A) {
+        const p = ph[i];
+        ax += A * Math.sin(y * fq + t * 0.8 + p);
+        ay += A * Math.cos(x * fq - t * 0.6 + p * 1.3);
+      }
+      if (pr) {
+        const dx = x - pxp, dy = y - pyp, d2 = dx * dx + dy * dy;
+        if (d2 < pr * pr) {
+          const d = Math.sqrt(d2) || 1, f = (1 - d / pr); const ff = f * f * pst / d;
+          ax += dx * ff; ay += dy * ff;
+        }
+      }
+      vx[i] = (vx[i] + ax * dt) * damp;
+      vy[i] = (vy[i] + ay * dt) * damp;
+      px[i] = x + vx[i] * dt; py[i] = y + vy[i] * dt;
+    }
+  }
+
+  function render() {
+    const sz = SIZES[S.size - 1], base = Math.floor(sz), frac = sz - base;
+    const gain = 1 / Math.max(1, base * 0.7);
+    for (let i = 0; i < N; i++) {
+      const x = px[i] | 0, y = py[i] | 0;
+      const kk = base + (frac && (i & 1) ? 1 : 0);
+      if (x < 0 || y < 0 || x + kk > W || y + kk > H) continue;
+      const v = lum[i] * gain * (hold[i] > 0 ? 0.55 : 1);
+      if (kk === 1) acc[y * W + x] += v;
+      else for (let yy = 0; yy < kk; yy++) { const o = (y + yy) * W + x; for (let xx = 0; xx < kk; xx++) acc[o + xx] += v; }
+    }
+    const decay = playing ? [0, 0.35, 0.5, 0.62, 0.72, 0.8, 0.86, 0.91][S.trails - 1] : 0;
+    for (let i = 0, n = W * H; i < n; i++) {
+      const v = acc[i];
+      buf32[i] = lut[v >= 1 ? 255 : (v * 255) | 0];
+      acc[i] = v * decay;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const pad = 24, bw = stage.clientWidth - pad * 2, bh = stage.clientHeight - pad * 2;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const sc = Math.min(dpr, 1600 / Math.max(w, h));
+    const nW = Math.max(2, Math.round(w * sc)), nH = Math.max(2, Math.round(h * sc));
+    cv.style.width = Math.round(w) + "px"; cv.style.height = Math.round(h) + "px";
+    if (nW !== W || nH !== H) {
+      const fx = nW / W, fy = nH / H;
+      for (let i = 0; i < N; i++) { px[i] *= fx; py[i] *= fy; }
+      W = nW; H = nH; cv.width = W; cv.height = H;
+      acc = new Float32Array(W * H);
+      img = ctx.createImageData(W, H);
+      buf32 = new Uint32Array(img.data.buffer);
+      rebuild(false);
+    }
+  }
+  new ResizeObserver(layout).observe(stage);
+
+  let last = performance.now(), simT = 0, nextPulse = 3;
+  function tick(now) {
+    const dt = Math.min(2.5, (now - last) / 16.667); last = now;
+    if (buf32) {
+      if (playing) {
+        simT += dt / 60;
+        step(dt, simT);
+        if (S.pulse === "auto" && simT > nextPulse) { pulse(); nextPulse = simT + 3.2 + Math.random() * 1.5; }
+      }
+      render();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export ----------
+  const dlReady = window.claude && typeof window.claude.use === "function"
+    ? window.claude.use("downloads").catch(() => null)
+    : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+  const baseName = () => "particles-" + S.comp;
+
+  $("exPng").onclick = () => cv.toBlob(b => b ? saveFile(baseName() + ".png", b) : status("PNG export failed"), "image/png");
+
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!cv.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    if (!playing) { playing = true; syncUI(); }
+    const rec = new MediaRecorder(cv.captureStream(60), { mimeType: mime, videoBitsPerSecond: 16e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false;
+      $("exVid").disabled = false; $("exVid").textContent = "Record 8s";
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(baseName() + "." + ext, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    recording = true;
+    $("exVid").disabled = true; $("exVid").textContent = "Recording…";
+    rec.start(250);
+    setTimeout(() => rec.stop(), 8000);
+  };
+
+  // ---------- boot ----------
+  buildLUT();
+  syncUI();
+  layout();
+  if (REDUCED) for (let i = 0; i < N; i++) { px[i] = hx[i]; py[i] = hy[i]; }
+  requestAnimationFrame(tick);
+})();
+</script>
