@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Ink</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: black instrument panel on the left, paper stage filling the rest; stacks on phones. */
+:root {
+  --page: #e2e4e7;
+  --page-fg: #1a1c20;
+  --panel: #0a0a0b;
+  --panel-fg: #f0f0ee;
+  --panel-muted: #7b7d82;
+  --panel-line: #26272a;
+  --track: #4a4b50;
+  --accent: #4b3bff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #111214; --page-fg: #e6e7ea; color-scheme: dark; }
+
+body { background: var(--page); color: var(--page-fg); font-family: var(--mono); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.app {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); left: 0; right: 0;
+  display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px;
+}
+.panel {
+  background: var(--panel); color: var(--panel-fg);
+  border-radius: 18px; padding: 22px 22px 18px;
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
+}
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 16px; }
+.ph b { font-weight: 500; font-size: 12px; letter-spacing: .14em; }
+.ph span { font-size: 10px; color: var(--panel-muted); }
+.sec { display: grid; gap: 16px; padding-block: 18px; border-top: 1px solid var(--panel-line); }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--panel-fg); }
+.sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--panel-muted); }
+.hint { font-size: 10px; line-height: 1.5; color: var(--panel-muted); margin: -6px 0 0; }
+
+.sl { display: grid; gap: 2px; }
+.sl .lbl { cursor: help; }
+.track { position: relative; height: 24px; }
+.track input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+.track input::-webkit-slider-runnable-track { height: 1px; background: var(--track); }
+.track input::-moz-range-track { height: 1px; background: var(--track); }
+.track input::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; margin-top: -11.5px; }
+.track input::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 0; }
+.track input:focus-visible { outline: none; }
+.track input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.track input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.bubble { position: absolute; top: 0; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 9.5px; font-weight: 500; color: #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.dial { display: grid; justify-items: center; gap: 6px; }
+.knob { position: relative; width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; cursor: grab; touch-action: none; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d9d6ff; }
+.knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.knob span { font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.needle { position: absolute; left: 50%; top: 50%; width: 27px; height: 0; transform-origin: 0 0; pointer-events: none; }
+.needle::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dv { font-size: 10px; color: var(--panel-muted); font-variant-numeric: tabular-nums; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  height: 32px; padding: 0 10px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--panel-fg); border: 1px solid #d8d8d8;
+}
+.btn:hover { background: #1b1b1e; }
+.btn.fill { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.fill:hover { background: #3b2bef; }
+.btn.quiet { border-color: #3a3b3f; color: var(--panel-muted); }
+.btn:focus-visible, .seg button:focus-visible, .chip:focus-visible, .sw:focus-visible, .txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; height: 30px; border-radius: 3px; border: 1px solid #3a3b3f; background: transparent; color: var(--panel-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chip:hover { color: var(--panel-fg); }
+.chip[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); border-color: var(--panel-fg); }
+.chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid #3a3b3f; border-radius: 3px; overflow: hidden; }
+.seg button { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: transparent; color: var(--panel-muted); border: 0; padding: 7px 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-fg); color: var(--panel); }
+
+.sws { display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 18px; }
+.swc { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--panel-muted); }
+.sw { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; padding: 0; border: 1px solid #3a3b3f; border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.sw::-webkit-color-swatch-wrapper { padding: 0; }
+.sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sw::-moz-color-swatch { border: 0; border-radius: 50%; }
+.txt { width: 100%; height: 32px; padding: 0 10px; background: #141416; color: var(--panel-fg); border: 1px solid #3a3b3f; border-radius: 3px; font: 12px var(--mono); letter-spacing: .04em; }
+
+.status { min-height: 14px; font-size: 10px; color: var(--panel-muted); padding-top: 4px; }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; background: #ecebe8; }
+.stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.err { padding: 24px; max-width: 46ch; font-size: 12px; line-height: 1.6; color: #e6e6e6; }
+
+@media (max-width: 760px) {
+  .app { position: static; grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .stage { height: min(62vh, 100vw); order: -1; }
+  .panel { overflow: visible; }
+}
+</style>
+
+<div class="app">
+  <aside class="panel" aria-label="Signal ink controls">
+    <div class="ph"><b>SIGNAL INK</b><span id="modeName">Sweeping</span></div>
+
+    <div class="sec" id="filterCtl">
+      <span class="sub">Filter = focus</span>
+      <div class="row"><span class="lbl">Region</span>
+        <div class="seg" role="group" aria-label="Filter region">
+          <button type="button" data-region="full">Full</button>
+          <button type="button" data-region="pane">Pane</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter, and its focus, glides across the signal.">Sweep</span>
+        <div class="seg" role="group" aria-label="Sweep">
+          <button type="button" data-sweep="off">Off</button>
+          <button type="button" data-sweep="on">On</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl" title="The filter rises and falls, so the signal drifts in and out of focus.">Breathe</span>
+        <div class="seg" role="group" aria-label="Breathe">
+          <button type="button" data-breathe="off">Off</button>
+          <button type="button" data-breathe="on">On</button>
+        </div>
+      </div>
+      <p class="hint">Drag on the image to move the filter.</p>
+    </div>
+
+    <div class="sec" id="signalCtl"><span class="sub">Signal</span></div>
+    <div class="sec" id="inkCtl"><span class="sub">Ink</span></div>
+    <div class="sec" id="partCtl"><span class="sub">Particles</span></div>
+    <div class="sec" id="paperCtl"><span class="sub">Paper &amp; motion</span></div>
+
+    <div class="sec" id="colorCtl">
+      <span class="sub">Color</span>
+      <div class="chips" role="group" aria-label="Palette" id="palChips"></div>
+      <div class="sws">
+        <label class="swc"><input type="color" class="sw" data-col="bg">Paper</label>
+        <label class="swc"><input type="color" class="sw" data-col="ink">Ink</label>
+      </div>
+    </div>
+
+    <div class="sec" id="typeCtl">
+      <span class="sub">Type</span>
+      <div class="row"><span class="lbl" title="Small labels for what goes in and what leaves.">Labels</span>
+        <div class="seg" role="group" aria-label="Show labels">
+          <button type="button" data-labels="on">On</button>
+          <button type="button" data-labels="off">Off</button>
+        </div>
+      </div>
+      <input class="txt" id="l1" maxlength="40" aria-label="Top label">
+      <input class="txt" id="l2" maxlength="40" aria-label="Focus label">
+    </div>
+
+    <div class="sec">
+      <span class="lbl">Export</span>
+      <div class="row"><span class="lbl">Frame</span>
+        <div class="seg" role="group" aria-label="Frame ratio">
+          <button type="button" data-ar="3:4">3:4</button>
+          <button type="button" data-ar="4:5">4:5</button>
+          <button type="button" data-ar="1:1">1:1</button>
+          <button type="button" data-ar="16:9">16:9</button>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn fill" id="exPng" type="button">PNG</button>
+        <button class="btn" id="exVid" type="button">Record 8s</button>
+      </div>
+      <div class="btns">
+        <button class="btn" id="play" type="button">Pause</button>
+        <button class="btn quiet" id="reset" type="button">Reset</button>
+      </div>
+      <div class="btns">
+        <button class="btn quiet" id="copySet" type="button">Copy settings</button>
+        <button class="btn quiet" id="loadSet" type="button">Load settings</button>
+      </div>
+      <textarea class="txt" id="setBox" rows="4" hidden aria-label="Settings code" style="height:auto;padding:8px 10px;font-size:10px;line-height:1.4;resize:vertical"></textarea>
+      <button class="btn" id="applySet" type="button" hidden>Apply pasted settings</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="out" aria-label="Signal ink preview: an ink waveform on paper, blurred, jagged and scattered outside the filter, solid and sharp inside it"></canvas>
+  </main>
+</div>
+
+<script>
+(() => {
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = id => document.getElementById(id);
+
+  const PALETTES = {
+    paper: { name: "Paper",    bg: "#ecebe8", ink: "#0a0a0a" },
+    warm:  { name: "Warm",     bg: "#efe9df", ink: "#1c130b" },
+    blue:  { name: "Blue ink", bg: "#eceef2", ink: "#121f52" },
+    grey:  { name: "Gray",     bg: "#d9d9d6", ink: "#0d0d0d" },
+    night: { name: "Night",    bg: "#0b0b0b", ink: "#ecebe6" },
+    ice:   { name: "Ice",      bg: "#04060b", ink: "#c3dbf7" }
+  };
+  // Default look, as tuned and saved by the team.
+  function defaults() {
+    return {
+    "region": "pane",
+    "sweep": "off",
+    "breathe": "off",
+    "px": 0.5,
+    "filter": 100,
+    "pwidth": 84,
+    "edge": 100,
+    "freq": 22,
+    "harm": 0,
+    "amp": 43,
+    "height": 55,
+    "noise": 100,
+    "grit": 43,
+    "spikes": 35,
+    "body": 0,
+    "weight": 100,
+    "edgek": 0,
+    "blur": 100,
+    "parts": 58,
+    "psize": 0,
+    "pdark": 100,
+    "rise": 100,
+    "grain": 100,
+    "vignette": 100,
+    "speed": 59,
+    "palette": "paper",
+    "bg": "#ecebe8",
+    "ink": "#0a0a0a",
+    "labels": "off",
+    "l1": "IN THE REQUEST YOU SEND",
+    "l2": "WHAT LEAVES",
+    "ar": "3:4"
+  };
+  }
+  const KEY = "signal-ink-v3";
+  let S = defaults();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) S = Object.assign(defaults(), s); } catch (e) {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  let dirty = true;
+  const changed = () => { persist(); dirty = true; };
+
+  const SLIDERS = [
+    ["filter", "Filter", "How clear and in focus the signal gets inside the filter.", "filterCtl"],
+    ["pwidth", "Width", "Width of the filtered, in-focus region.", "filterCtl"],
+    ["edge", "Falloff", "How gradually focus fades at the filter's edges.", "filterCtl"],
+    ["freq", "Frequency", "How many waves run across the frame.", "signalCtl"],
+    ["harm", "Harmonics", "Overtones that sharpen the clean wave's peaks.", "signalCtl"],
+    ["amp", "Amplitude", "Height of the wave.", "signalCtl"],
+    ["height", "Height", "Where the wave sits in the frame.", "signalCtl"],
+    ["noise", "Noise", "How jagged the unfiltered signal is.", "signalCtl"],
+    ["grit", "Grit", "Fine, fast jitter in the noise.", "signalCtl"],
+    ["spikes", "Spikes", "Sudden sharp peaks in the noise.", "signalCtl"],
+    ["body", "Body", "How far the ink bleeds down below the wave.", "inkCtl"],
+    ["weight", "Weight", "How dark the ink is.", "inkCtl"],
+    ["edgek", "Edge", "How crisp the top edge of the unfiltered wave is. Inside the filter the edge is always sharp.", "inkCtl"],
+    ["parts", "Particles", "How many particles lift off the noisy signal. Inside the filter only a few crisp ones remain.", "partCtl"],
+    ["psize", "Particle size", "Size of the particles. Out-of-focus particles also grow softer.", "partCtl"],
+    ["pdark", "Particle ink", "How dark each particle is.", "partCtl"],
+    ["rise", "Rise", "How far particles drift up off the wave.", "partCtl"],
+    ["blur", "Blur", "How soft and out of focus the unfiltered signal is.", "inkCtl"],
+    ["grain", "Grain", "Paper grain.", "paperCtl"],
+    ["vignette", "Shade", "Soft shading toward the corners of the paper.", "paperCtl"],
+    ["speed", "Speed", "How fast everything moves.", "paperCtl"]
+  ];
+  const sliderEls = {};
+  for (const [k, name, tip, parent] of SLIDERS) {
+    const w = document.createElement("div");
+    w.className = "sl";
+    w.innerHTML = `<label class="lbl" for="s-${k}" title="${tip}">${name}</label>
+      <div class="track"><input type="range" id="s-${k}" min="0" max="100" step="1"><span class="bubble" aria-hidden="true"></span></div>`;
+    const host = $(parent);
+    host.insertBefore(w, parent === "filterCtl" ? host.querySelector(".row") : null);
+    const input = w.querySelector("input"), bub = w.querySelector(".bubble");
+    sliderEls[k] = { input, bub };
+    input.addEventListener("input", () => { S[k] = +input.value; syncSlider(k); changed(); if (k === "parts" && typeof scheduleSeed === "function") scheduleSeed(); });
+  }
+  function syncSlider(k) {
+    const { input, bub } = sliderEls[k], v = S[k];
+    input.value = v; bub.textContent = v;
+    bub.style.left = `calc(${v / 100} * (100% - 24px))`;
+  }
+  for (const [id, p] of Object.entries(PALETTES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.pal = id;
+    b.innerHTML = `<i style="background:radial-gradient(circle, ${p.ink} 35%, ${p.bg} 40%); box-shadow: 0 0 0 1px #3a3b3f"></i>${p.name}`;
+    b.onclick = () => { S.palette = id; S.bg = p.bg; S.ink = p.ink; syncUI(); changed(); };
+    $("palChips").appendChild(b);
+  }
+  document.querySelectorAll("[data-col]").forEach(inp => inp.addEventListener("input", () => { S[inp.dataset.col] = inp.value; S.palette = "custom"; syncUI(); changed(); }));
+  for (const key of ["region", "sweep", "breathe", "labels", "ar"])
+    document.querySelectorAll(`[data-${key}]`).forEach(b => b.onclick = () => {
+      S[key] = b.dataset[key];
+      if (key === "sweep" && S.sweep === "on") S.region = "pane";
+      syncUI(); if (key === "ar") layout(); changed();
+    });
+  for (const id of ["l1", "l2"]) $(id).addEventListener("input", e => { S[id] = e.target.value; changed(); });
+
+  let playing = !REDUCED;
+  $("play").onclick = () => { playing = !playing; syncUI(); };
+  $("reset").onclick = () => { S = defaults(); syncUI(); layout(); seedParticles(); changed(); status("Reset to defaults"); };
+
+  function syncUI() {
+    for (const k in sliderEls) syncSlider(k);
+    const press = (attr, val) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+    for (const k of ["region", "sweep", "breathe", "labels", "ar"]) press(k, S[k]);
+    press("pal", S.palette);
+    document.querySelectorAll("[data-col]").forEach(inp => inp.value = S[inp.dataset.col]);
+    for (const id of ["l1", "l2"]) if ($(id).value !== S[id]) $(id).value = S[id];
+    $("modeName").textContent = S.region === "full" ? "In focus" : S.sweep === "on" ? "Sweeping" : "Filtering";
+    $("play").textContent = playing ? "Pause" : "Play";
+    $("stage").style.background = S.bg;
+  }
+
+  // ---------- WebGL ----------
+  const glc = document.createElement("canvas");
+  const gl = glc.getContext("webgl", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+  const out = $("out"), octx = out.getContext("2d");
+  if (!gl) { $("stage").innerHTML = '<div class="err">This tool needs WebGL, which isn\'t available in this browser. Try a recent Chrome, Safari or Firefox with hardware acceleration on.</div>'; return; }
+  const VS = "attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }";
+  const FS = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uFrame, uScale;
+uniform float uFilter, uRegion, uPc, uPw, uEdge;
+uniform float uFreq, uHarm, uAmp, uCrestY, uNoise, uGrit, uSpikes;
+uniform float uBody, uWeight, uEdgeK, uSpray, uDot, uStipple, uBlur, uGrain, uVig;
+uniform vec3 uBg, uInk;
+float hash(float n){ return fract(sin(n * 127.1) * 43758.5453); }
+float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n1(float x){ float i = floor(x), f = fract(x), u = f * f * (3. - 2. * f); return mix(hash(i), hash(i + 1.), u); }
+float fbm1(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 5; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s; }
+float fbmLo(float x){ float a = 0.5, s = 0.; for (int i = 0; i < 2; i++) { s += a * n1(x); x = x * 2.07 + 3.1; a *= 0.5; } return s / 0.75 * 0.9375; }
+
+float filt(float x){
+  if (uRegion < 0.5) return uFilter;
+  float l = uPc - uPw * 0.5, r = uPc + uPw * 0.5;
+  return uFilter * smoothstep(l - uEdge, l + uEdge, x) * (1. - smoothstep(r - uEdge, r + uEdge, x));
+}
+// The signal. Unfocused noise uses fewer octaves, so it reads as blurred.
+float crest(float x, float c){
+  float w = 6.2831853 * uFreq * x + uTime * 0.45;
+  float clean = (sin(w) + uHarm * (0.55 * sin(2. * w + 0.7) + 0.35 * sin(3. * w + uTime * 0.2) + 0.2 * sin(5. * w))) / (1. + uHarm);
+  clean = sign(clean) * pow(abs(clean), 0.85);
+  float b = (1. - c) * uBlur;
+  float nzHi = fbm1(x * 20. + uTime * 0.3) * 2. - 1.;
+  float nzLo = fbmLo(x * 20. + uTime * 0.3) * 2. - 1.;
+  float nz = mix(nzHi, nzLo, b) * 1.3;
+  nz += (hash(floor(x * 180.) + uFrame * 13.1) - 0.5) * uGrit * 0.6 * (1. - b);
+  nz += pow(max(0., n1(x * 30. + uTime * 1.5) - 0.7) / 0.3, 2.) * uSpikes * 1.6;
+  float y = (0.35 + 0.65 * c) * clean * uAmp + (1. - c) * nz * uNoise * 0.6;
+  return uCrestY + 0.17 * y;
+}
+void main(){
+  vec2 frag = gl_FragCoord.xy, uv = frag / uRes;
+  float x = uv.x, y = uv.y, asp = uRes.x / uRes.y;
+  float c = filt(x);
+  float focus = c;
+  float b = (1. - c) * uBlur;
+  float cy = crest(x, c);
+  // blur also spreads the wave sideways: average neighbouring crests
+  if (b > 0.01) { float dx = 0.012 * b; cy = (cy * 2. + crest(x - dx, c) + crest(x + dx, c)) * 0.25; }
+  float d = cy - y;                   // > 0 below the crest
+  float peak = clamp((cy - uCrestY) / (0.17 * max(uAmp, 0.2)) * 1.4, 0., 1.);
+  // ink: a crisp top edge, a body bleeding down, softened by blur
+  float ew = mix(mix(0.002, 0.012, 1. - uEdgeK), 0.0012, focus) + b * 0.05;
+  float top = d < 0. ? exp(d / ew) : 1.;
+  float L = uBody * (0.45 + 0.75 * fbm1(x * asp * 9. + 3.)) * (0.6 + 0.8 * peak) + b * 0.08;
+  float body = d > 0. ? exp(-d / L) : 1.;
+  float streak = 0.82 + 0.18 * fbm1(x * asp * 60. + 7.);
+  float ink = top * body * streak * uWeight * (1. + b * 0.25);
+  float v = clamp(ink, 0., 1.);
+  vec3 paper = uBg * (1. - uVig * 0.18 * smoothstep(0.35, 0.95, length((uv - 0.5) * vec2(1.1, 1.))));
+  vec3 col = mix(paper, uInk, clamp(v, 0., 1.));
+  col += (hash2(frag / uScale + fract(uFrame * 0.618) * 31.) - 0.5) * uGrain * 0.05;
+  gl_FragColor = vec4(clamp(col, 0., 1.), 1.);
+}`;
+  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aLoc = gl.getAttribLocation(prog, "a"); gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+  const quadBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+  // Particles reuse the signal functions, so they sit exactly on the same wave.
+  const HEAD = FS.slice(0, FS.indexOf("void main(){"));
+  const PVS = HEAD + `
+attribute vec4 aP;
+uniform float uParts, uPSize, uRise;
+varying float vA; varying float vSoft;
+void main(){
+  float r1 = aP.x, r2 = aP.y, r3 = aP.z, r4 = aP.w;
+  float x = r1;
+  float c = filt(x), b = (1. - c) * uBlur;
+  float cy = crest(x, c);
+  float y, a, size;
+  if (r4 < 0.72) {
+    // dust lifting off the wave and drifting up
+    float life = fract(r2 + uTime * 0.06 * (0.4 + r3));
+    float off = -log(1. - r3 * 0.985) * (0.012 + 0.05 * uRise);
+    y = cy + off + life * 0.12 * uRise;
+    x += (n1(r1 * 40. + uTime * 0.6) - 0.5) * 0.01 * (1. - c) + (life - 0.5) * 0.01 * (r2 - 0.5);
+    a = (1. - life) * exp(-off * 9.);
+  } else {
+    // a few grains settling inside the ink below the wave
+    float dd = pow(r3, 1.6) * 0.22;
+    y = cy - dd;
+    x += (hash(r2 * 9.1) - 0.5) * 0.004;
+    a = 0.55 * exp(-dd * 7.);
+  }
+  // noisy, unfiltered dust is plentiful and soft; inside the filter only a few crisp grains remain
+  a *= mix(1., 0.1, c);
+  size = uPSize * (0.55 + 1.6 * pow(r2, 4.)) * (1. + b * 2.2);
+  a /= (1. + b * 2.2);
+  vSoft = b;
+  vA = a * uParts;
+  gl_Position = vec4(x * 2. - 1., y * 2. - 1., 0., 1.);
+  gl_PointSize = size * uScale;
+}`;
+  const PFS = `
+precision mediump float;
+uniform vec3 uPC; varying float vA; varying float vSoft;
+void main(){
+  float d = length(gl_PointCoord - 0.5);
+  float crisp = 1. - smoothstep(0.38, 0.5, d);
+  float soft = 1. - smoothstep(0.0, 0.5, d);
+  float f = mix(crisp, soft * soft, vSoft);
+  gl_FragColor = vec4(uPC * vA * f, 0.);
+}`;
+  const pprog = gl.createProgram();
+  gl.attachShader(pprog, mk(gl.VERTEX_SHADER, PVS)); gl.attachShader(pprog, mk(gl.FRAGMENT_SHADER, PFS)); gl.linkProgram(pprog);
+  if (!gl.getProgramParameter(pprog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pprog));
+  const PU = {};
+  for (const n of ["uRes", "uTime", "uFrame", "uScale", "uFilter", "uRegion", "uPc", "uPw", "uEdge", "uFreq", "uHarm", "uAmp", "uCrestY", "uNoise", "uGrit", "uSpikes", "uBlur", "uParts", "uPSize", "uRise", "uPC"])
+    PU[n] = gl.getUniformLocation(pprog, n);
+  const pbuf = gl.createBuffer();
+  let PN = 0;
+  function seedParticles() {
+    PN = Math.round(4000 + S.parts / 100 * 56000);
+    const d = new Float32Array(PN * 4);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random();
+    gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+  }
+  let seedTimer;
+  const scheduleSeed = () => { clearTimeout(seedTimer); seedTimer = setTimeout(() => { seedParticles(); dirty = true; }, 120); };
+  const U = {};
+  for (const n of ["uRes", "uTime", "uFrame", "uScale", "uFilter", "uRegion", "uPc", "uPw", "uEdge", "uFreq", "uHarm", "uAmp", "uCrestY", "uNoise", "uGrit", "uSpikes", "uBody", "uWeight", "uEdgeK", "uSpray", "uDot", "uStipple", "uBlur", "uGrain", "uVig", "uBg", "uInk"])
+    U[n] = gl.getUniformLocation(prog, n);
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+
+  const paneAt = t => ({ pc: S.sweep === "on" ? 0.5 + 0.34 * Math.sin(t * 0.4) : S.px, pw: 0.08 + S.pwidth / 100 * 0.6 });
+  function renderGL(W, H, t, frameNo, scale) {
+    if (glc.width !== W || glc.height !== H) { glc.width = W; glc.height = H; }
+    gl.viewport(0, 0, W, H);
+    const f = S.filter / 100 * (S.breathe === "on" ? 0.5 - 0.5 * Math.cos(t * 0.7) : 1);
+    const { pc, pw } = paneAt(t);
+    gl.uniform2f(U.uRes, W, H); gl.uniform1f(U.uTime, t); gl.uniform1f(U.uFrame, frameNo); gl.uniform1f(U.uScale, scale);
+    gl.uniform1f(U.uFilter, f); gl.uniform1f(U.uRegion, S.region === "pane" ? 1 : 0); gl.uniform1f(U.uPc, pc); gl.uniform1f(U.uPw, pw);
+    gl.uniform1f(U.uEdge, 0.01 + S.edge / 100 * 0.16);
+    gl.uniform1f(U.uFreq, 0.4 + S.freq / 100 * 5); gl.uniform1f(U.uHarm, S.harm / 100); gl.uniform1f(U.uAmp, 0.2 + S.amp / 100 * 1.4);
+    gl.uniform1f(U.uCrestY, 0.3 + S.height / 100 * 0.45); gl.uniform1f(U.uNoise, S.noise / 100 * 1.4); gl.uniform1f(U.uGrit, S.grit / 100); gl.uniform1f(U.uSpikes, S.spikes / 100);
+    gl.uniform1f(U.uBody, 0.03 + S.body / 100 * 0.45);
+    gl.uniform1f(U.uWeight, 0.3 + S.weight / 100 * 1.2);
+    gl.uniform1f(U.uEdgeK, S.edgek / 100);
+    gl.uniform1f(U.uSpray, S.spray / 100 * 1.4);
+    gl.uniform1f(U.uDot, 0.55 + S.dot / 100 * 2.2);
+    gl.uniform1f(U.uStipple, S.stipple / 100);
+    gl.uniform1f(U.uBlur, S.blur / 100);
+    gl.uniform1f(U.uGrain, S.grain / 100);
+    gl.uniform1f(U.uVig, S.vignette / 100);
+    gl.uniform3fv(U.uBg, rgb(S.bg)); gl.uniform3fv(U.uInk, rgb(S.ink));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (S.parts > 0 && PN) {
+      gl.useProgram(pprog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pbuf);
+      const ap = gl.getAttribLocation(pprog, "aP");
+      gl.disableVertexAttribArray(aLoc);
+      gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 4, gl.FLOAT, false, 0, 0);
+      const vals = { uRes: [W, H], uTime: t, uFrame: frameNo, uScale: scale, uFilter: f, uRegion: S.region === "pane" ? 1 : 0, uPc: pc, uPw: pw,
+        uEdge: 0.01 + S.edge / 100 * 0.16, uFreq: 0.4 + S.freq / 100 * 5, uHarm: S.harm / 100, uAmp: 0.2 + S.amp / 100 * 1.4,
+        uCrestY: 0.3 + S.height / 100 * 0.45, uNoise: S.noise / 100 * 1.4, uGrit: S.grit / 100, uSpikes: S.spikes / 100, uBlur: S.blur / 100,
+        uParts: 0.35 + S.pdark / 100 * 0.6, uPSize: 1.0 + S.psize / 100 * 4, uRise: S.rise / 100 };
+      for (const [k, v] of Object.entries(vals)) Array.isArray(v) ? gl.uniform2f(PU[k], v[0], v[1]) : gl.uniform1f(PU[k], v);
+      const bg = rgb(S.bg), ink = rgb(S.ink), dark = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] < 0.4;
+      gl.enable(gl.BLEND);
+      if (dark) { gl.blendFunc(gl.ONE, gl.ONE); gl.uniform3fv(PU.uPC, ink); }
+      else { gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_COLOR); gl.uniform3fv(PU.uPC, [1 - ink[0], 1 - ink[1], 1 - ink[2]]); }
+      gl.drawArrays(gl.POINTS, 0, PN);
+      gl.disable(gl.BLEND);
+      gl.disableVertexAttribArray(ap);
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+    }
+  }
+
+  function drawLabels(c, W, H, t) {
+    if (S.labels !== "on") return;
+    const fs = Math.max(8, Math.round(Math.min(W, H) * 0.019)), pad = Math.round(Math.min(W, H) * 0.06);
+    c.save();
+    c.font = `500 ${fs}px "IBM Plex Mono", ui-monospace, Menlo, monospace`;
+    if ("letterSpacing" in c) c.letterSpacing = fs * 0.12 + "px";
+    c.fillStyle = S.ink; c.globalAlpha = 0.8;
+    c.fillText((S.l1 || "").toUpperCase(), pad, pad + fs);
+    if (S.region === "pane") {
+      const { pc } = paneAt(t);
+      c.textAlign = "center";
+      const x = Math.min(W - pad - fs * 6, Math.max(pad + fs * 6, pc * W));
+      c.fillText((S.l2 || "").toUpperCase(), x, H - pad);
+      c.globalAlpha = 0.35;
+      c.fillRect(Math.round(x) - 0.5, H - pad - fs * 2.2, 1, fs);
+    } else {
+      c.fillText((S.l2 || "").toUpperCase(), pad, H - pad);
+    }
+    c.restore();
+  }
+
+  // ---------- layout & drag ----------
+  let dpr = 1, cssW = 0, cssH = 0;
+  function layout() {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const stage = $("stage"), bw = stage.clientWidth, bh = stage.clientHeight;
+    if (bw <= 0 || bh <= 0) return;
+    let w = bw, h = bw * ah / aw;
+    if (h > bh) { h = bh; w = bh * aw / ah; }
+    dpr = Math.min(window.devicePixelRatio || 1, 2, 1800 / Math.max(w, h));
+    cssW = Math.round(w); cssH = Math.round(h);
+    out.style.width = cssW + "px"; out.style.height = cssH + "px";
+    out.width = Math.round(w * dpr); out.height = Math.round(h * dpr);
+    dirty = true;
+  }
+  new ResizeObserver(layout).observe($("stage"));
+  let dragging = false;
+  const setPx = e => { const r = out.getBoundingClientRect(); S.px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); dirty = true; };
+  out.addEventListener("pointerdown", e => {
+    dragging = true; out.setPointerCapture(e.pointerId);
+    if (S.sweep === "on" || S.region !== "pane") { S.sweep = "off"; S.region = "pane"; syncUI(); }
+    setPx(e);
+  });
+  out.addEventListener("pointermove", e => { if (dragging) setPx(e); });
+  const endDrag = () => { if (dragging) { dragging = false; persist(); } };
+  out.addEventListener("pointerup", endDrag);
+  out.addEventListener("pointercancel", endDrag);
+  out.style.cursor = "ew-resize";
+
+  // ---------- loop ----------
+  let simT = 3, frameNo = 1, frameAcc = 0, last = performance.now();
+  function frame(W, H, scale, c) { renderGL(W, H, simT, frameNo, scale); c.drawImage(glc, 0, 0, W, H); drawLabels(c, W, H, simT); }
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (playing) {
+      const sp = 0.15 + S.speed / 100 * 1.8;
+      simT += dt * sp; frameAcc += dt * 24;
+      if (frameAcc >= 1) { frameNo += Math.floor(frameAcc); frameAcc %= 1; }
+    }
+    if ((playing || dirty) && out.width) { frame(out.width, out.height, dpr, octx); dirty = false; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- export & settings ----------
+  const dlReady = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+  let stTimer;
+  function status(msg) { $("status").textContent = msg; clearTimeout(stTimer); stTimer = setTimeout(() => { $("status").textContent = ""; }, 5000); }
+  async function saveFile(name, blob) {
+    const dl = await dlReady;
+    if (dl) {
+      try { await dl.save({ filename: name, data: blob }); status("Saved " + name); }
+      catch (e) { status(e && e.code === "declined" ? "Save cancelled" : "Couldn't save: " + ((e && (e.message || e.code)) || "unknown error")); }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status("Saved " + name);
+  }
+  $("exPng").onclick = () => {
+    const [aw, ah] = S.ar.split(":").map(Number);
+    const long = Math.min(3200, gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+    const W = aw >= ah ? long : Math.round(long * aw / ah), H = aw >= ah ? Math.round(long * ah / aw) : long;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    frame(W, H, W / cssW, c.getContext("2d"));
+    c.toBlob(b => { dirty = true; b ? saveFile("signal-ink.png", b) : status("PNG export failed"); }, "image/png");
+  };
+  let recording = false;
+  $("exVid").onclick = () => {
+    if (recording) return;
+    if (!out.captureStream || typeof MediaRecorder === "undefined") { status("Video recording isn't supported in this browser."); return; }
+    const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+    if (!mime) { status("Video recording isn't supported in this browser."); return; }
+    if (!playing) { playing = true; syncUI(); }
+    const rec = new MediaRecorder(out.captureStream(60), { mimeType: mime, videoBitsPerSecond: 24e6 });
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      recording = false; $("exVid").disabled = false; $("exVid").textContent = "Record 8s";
+      const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+      saveFile(`signal-ink-8s.${ext}`, new Blob(chunks, { type: mime.split(";")[0] }));
+    };
+    recording = true; $("exVid").disabled = true; $("exVid").textContent = "Recording…";
+    rec.start(250);
+    setTimeout(() => rec.stop(), 8000);
+  };
+  $("copySet").onclick = () => {
+    const code = JSON.stringify(S), box = $("setBox");
+    box.hidden = false; box.value = code; $("applySet").hidden = true;
+    const fallback = () => { box.focus(); box.select(); status("Select all and copy the settings above."); };
+    try { navigator.clipboard.writeText(code).then(() => status("Settings copied. Paste them anywhere to share this look."), fallback); } catch (e) { fallback(); }
+  };
+  $("loadSet").onclick = () => { const box = $("setBox"); box.hidden = false; box.value = ""; box.placeholder = "Paste settings here"; box.focus(); $("applySet").hidden = false; };
+  $("applySet").onclick = () => {
+    try {
+      const v = JSON.parse($("setBox").value);
+      if (!v || typeof v !== "object") throw 0;
+      S = Object.assign(defaults(), v);
+      syncUI(); layout(); seedParticles(); changed();
+      $("setBox").hidden = true; $("applySet").hidden = true;
+      status("Settings loaded");
+    } catch (e) { status("Those settings couldn't be read. Paste the full text from Copy settings."); }
+  };
+
+  // ---------- boot ----------
+  syncUI();
+  layout();
+  seedParticles();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty = true; });
+  requestAnimationFrame(tick);
+})();
+</script>
